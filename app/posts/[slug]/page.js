@@ -2,6 +2,8 @@ import { getPostBySlug, getAllPosts } from '@/lib/posts'
 import { notFound } from 'next/navigation'
 import AdminDeletePost from '@/components/AdminDeletePost'
 
+export const dynamic = 'force-dynamic'
+
 // Simple markdown-to-HTML parser (no external deps)
 function parseMarkdown(md) {
   let html = md
@@ -95,12 +97,12 @@ function formatDate(iso) {
 }
 
 export async function generateStaticParams() {
-  const posts = getAllPosts()
+  const posts = await getAllPosts()
   return posts.map(p => ({ slug: p.slug }))
 }
 
 export async function generateMetadata({ params }) {
-  const post = getPostBySlug(params.slug)
+  const post = await getPostBySlug(params.slug)
   if (!post) return { title: 'Not Found' }
   return {
     title: `${post.title} — dev.log`,
@@ -108,8 +110,8 @@ export async function generateMetadata({ params }) {
   }
 }
 
-export default function PostPage({ params }) {
-  const post = getPostBySlug(params.slug)
+export default async function PostPage({ params }) {
+  const post = await getPostBySlug(params.slug)
   if (!post) notFound()
 
   const c = COLOR_MAP[post.color] || COLOR_MAP.green

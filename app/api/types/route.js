@@ -3,7 +3,7 @@ import { createType, getAllTypes } from '@/lib/posts'
 import { isAdminAuthorizedByCredentials, unauthorizedResponse } from '@/lib/admin-auth'
 
 export async function GET() {
-  const types = getAllTypes()
+  const types = await getAllTypes()
   return NextResponse.json(types)
 }
 
@@ -13,7 +13,7 @@ export async function POST(request) {
     if (!isAdminAuthorizedByCredentials(body?.adminEmail, body?.adminPassword)) {
       return unauthorizedResponse()
     }
-    const created = createType(body?.type)
+    const created = await createType(body?.type)
     return NextResponse.json({ type: created }, { status: 201 })
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 })

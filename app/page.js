@@ -1,5 +1,7 @@
 import { getAllPosts } from '@/lib/posts'
 
+export const dynamic = 'force-dynamic'
+
 const COLOR_MAP = {
   green:  { accent: 'var(--green)',  dim: 'var(--green-dim)',  border: '#00e89630' },
   blue:   { accent: 'var(--blue)',   dim: 'var(--blue-dim)',   border: '#4d9fff28' },
@@ -15,8 +17,8 @@ function formatDate(iso) {
   })
 }
 
-export default function HomePage() {
-  const posts = getAllPosts()
+export default async function HomePage() {
+  const posts = await getAllPosts()
 
   return (
     <div style={{ width: '88%', maxWidth: 1700, margin: '0 auto', padding: '0 24px 60px' }}>

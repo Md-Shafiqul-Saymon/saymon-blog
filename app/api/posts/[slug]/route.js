@@ -9,7 +9,7 @@ export async function DELETE(request, { params }) {
     if (!isAdminAuthorizedByCredentials(adminEmail, adminPassword)) {
       return unauthorizedResponse()
     }
-    const removed = deletePostBySlug(params.slug)
+    const removed = await deletePostBySlug(params.slug)
     if (!removed) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }

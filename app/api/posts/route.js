@@ -3,7 +3,7 @@ import { createPost, getAllPosts } from '@/lib/posts'
 import { isAdminAuthorizedByCredentials, unauthorizedResponse } from '@/lib/admin-auth'
 
 export async function GET() {
-  const posts = getAllPosts()
+  const posts = await getAllPosts()
   return NextResponse.json(posts)
 }
 
@@ -37,7 +37,7 @@ export async function POST(request) {
       ? tags.split(',').map(t => t.trim()).filter(Boolean)
       : (Array.isArray(tags) ? tags : [])
 
-    const post = createPost({ title, subtitle, content, color, tags: tagList, format, type })
+    const post = await createPost({ title, subtitle, content, color, tags: tagList, format, type })
     return NextResponse.json(post, { status: 201 })
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 })
