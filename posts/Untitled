@@ -1,0 +1,10 @@
+Request URL
+http://localhost:3000/api/posts/aws-infrastructure-deep-dive
+Request Method
+DELETE
+Status Code
+401 Unauthorized
+Remote Address
+[::1]:3000
+Referrer Policy
+strict-origin-when-cross-origin

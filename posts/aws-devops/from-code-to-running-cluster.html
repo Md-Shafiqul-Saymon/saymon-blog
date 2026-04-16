@@ -1,0 +1,2621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS Infrastructure Deep Dive</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #1a1d24;
+    --border: #252830;
+    --border2: #2e3240;
+    --green: #00e896;
+    --green-dim: #00e89620;
+    --green-mid: #00e89640;
+    --blue: #4d9fff;
+    --blue-dim: #4d9fff18;
+    --amber: #ffb340;
+    --amber-dim: #ffb34018;
+    --pink: #ff5fa0;
+    --pink-dim: #ff5fa018;
+    --purple: #b06fff;
+    --purple-dim: #b06fff18;
+    --cyan: #00d4ff;
+    --cyan-dim: #00d4ff15;
+    --text: #e8eaf0;
+    --text-dim: #7a7f8e;
+    --text-dimmer: #454a57;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    position: relative;
+    padding: 80px 60px 60px;
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -120px; left: -120px;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, #00e89608 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--green);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .hero h1 {
+    font-family: var(--sans);
+    font-size: clamp(32px, 5vw, 56px);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -1px;
+    color: #fff;
+    max-width: 700px;
+  }
+  .hero h1 span { color: var(--green); }
+  .hero-sub {
+    margin-top: 20px;
+    color: var(--text-dim);
+    font-size: 13px;
+    max-width: 560px;
+    line-height: 1.8;
+  }
+  .hero-meta {
+    display: flex;
+    gap: 24px;
+    margin-top: 32px;
+    flex-wrap: wrap;
+  }
+  .meta-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .meta-pill .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+  }
+
+  /* ── NAV ── */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(10,12,16,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 60px;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+  }
+  .nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 20px;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-decoration: none;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: color .2s, border-color .2s;
+  }
+  .nav a:hover { color: var(--text); border-color: var(--border2); }
+  .nav a.active { color: var(--green); border-color: var(--green); }
+  .nav-num {
+    font-size: 10px;
+    color: var(--text-dimmer);
+  }
+
+  /* ── LAYOUT ── */
+  .content { max-width: 1100px; margin: 0 auto; padding: 0 60px 100px; }
+
+  /* ── PHASE SECTION ── */
+  .phase {
+    margin-top: 80px;
+    scroll-margin-top: 60px;
+  }
+  .phase-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    margin-bottom: 40px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .phase-num {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dimmer);
+    letter-spacing: 2px;
+    margin-top: 6px;
+    min-width: 60px;
+  }
+  .phase-title-wrap h2 {
+    font-family: var(--sans);
+    font-size: 28px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+  }
+  .phase-title-wrap p {
+    margin-top: 8px;
+    color: var(--text-dim);
+    font-size: 13px;
+    max-width: 620px;
+  }
+  .phase-accent {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 10px;
+    vertical-align: middle;
+  }
+
+  /* ── STEP CARDS ── */
+  .steps { display: flex; flex-direction: column; gap: 20px; }
+
+  .step {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+  .step:hover { border-color: var(--border2); }
+
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 24px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .step-icon {
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    font-family: var(--mono);
+    font-weight: 700;
+  }
+  .step-title {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 15px;
+    color: #fff;
+    flex: 1;
+  }
+  .step-badge {
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+    font-weight: 500;
+  }
+  .step-chevron {
+    color: var(--text-dimmer);
+    font-size: 12px;
+    transition: transform .25s;
+    margin-left: 8px;
+  }
+  .step.open .step-chevron { transform: rotate(90deg); }
+
+  .step-body {
+    display: none;
+    padding: 0 24px 24px;
+  }
+  .step.open .step-body { display: block; }
+
+  .step-desc {
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.8;
+    margin-bottom: 20px;
+    border-left: 2px solid var(--border2);
+    padding-left: 16px;
+  }
+
+  /* ── CODE BLOCKS ── */
+  .code-block {
+    background: #080a0d;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 16px 0;
+  }
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  .code-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .code-copy {
+    font-size: 10px;
+    color: var(--text-dimmer);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 3px 10px;
+    cursor: pointer;
+    font-family: var(--mono);
+    transition: color .15s, border-color .15s;
+  }
+  .code-copy:hover { color: var(--green); border-color: var(--green); }
+  .code-body {
+    padding: 20px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.75;
+  }
+  .code-body pre { white-space: pre; }
+
+  /* syntax colors */
+  .k { color: #ff5fa0; }   /* keyword */
+  .fn { color: #4d9fff; }  /* function */
+  .s { color: #00e896; }   /* string */
+  .c { color: #454a57; font-style: italic; } /* comment */
+  .v { color: #ffb340; }   /* variable */
+  .n { color: #b06fff; }   /* number / special */
+  .p { color: #7a7f8e; }   /* punctuation */
+
+  /* ── ANNOTATION CARDS ── */
+  .annotations { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 16px; }
+  .ann {
+    padding: 14px 16px;
+    border-radius: 6px;
+    border: 1px solid;
+    font-size: 12px;
+    line-height: 1.65;
+  }
+  .ann-title { font-weight: 700; font-size: 11px; letter-spacing: 0.5px; margin-bottom: 5px; }
+  .ann.green { background: var(--green-dim); border-color: #00e89630; }
+  .ann.green .ann-title { color: var(--green); }
+  .ann.blue { background: var(--blue-dim); border-color: #4d9fff28; }
+  .ann.blue .ann-title { color: var(--blue); }
+  .ann.amber { background: var(--amber-dim); border-color: #ffb34028; }
+  .ann.amber .ann-title { color: var(--amber); }
+  .ann.pink { background: var(--pink-dim); border-color: #ff5fa028; }
+  .ann.pink .ann-title { color: var(--pink); }
+  .ann.purple { background: var(--purple-dim); border-color: #b06fff28; }
+  .ann.purple .ann-title { color: var(--purple); }
+  .ann.cyan { background: var(--cyan-dim); border-color: #00d4ff22; }
+  .ann.cyan .ann-title { color: var(--cyan); }
+
+  /* ── FLOW DIAGRAM (inline SVG-like ASCII) ── */
+  .flow-diagram {
+    background: #080a0d;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 24px;
+    margin: 16px 0;
+    overflow-x: auto;
+  }
+  .flow-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin: 4px 0;
+    flex-wrap: nowrap;
+  }
+  .flow-box {
+    padding: 8px 16px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    border: 1px solid;
+    line-height: 1.3;
+    text-align: center;
+  }
+  .flow-arrow {
+    padding: 0 8px;
+    color: var(--text-dimmer);
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .flow-label {
+    font-size: 10px;
+    color: var(--text-dimmer);
+    padding: 0 4px;
+    white-space: nowrap;
+  }
+  .fb-green { background: var(--green-dim); border-color: #00e89640; color: var(--green); }
+  .fb-blue { background: var(--blue-dim); border-color: #4d9fff30; color: var(--blue); }
+  .fb-amber { background: var(--amber-dim); border-color: #ffb34030; color: var(--amber); }
+  .fb-pink { background: var(--pink-dim); border-color: #ff5fa030; color: var(--pink); }
+  .fb-purple { background: var(--purple-dim); border-color: #b06fff30; color: var(--purple); }
+  .fb-gray { background: var(--surface2); border-color: var(--border2); color: var(--text-dim); }
+
+  /* ── TABLE ── */
+  .info-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin: 16px 0;
+  }
+  .info-table th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-dimmer);
+    border-bottom: 1px solid var(--border);
+  }
+  .info-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+    vertical-align: top;
+  }
+  .info-table td:first-child { color: var(--text); font-weight: 500; }
+  .info-table tr:last-child td { border-bottom: none; }
+  .info-table tr:hover td { background: var(--surface2); }
+
+  /* ── CALLOUT ── */
+  .callout {
+    display: flex;
+    gap: 14px;
+    padding: 16px;
+    border-radius: 6px;
+    margin: 16px 0;
+    font-size: 12px;
+    line-height: 1.7;
+    border: 1px solid;
+  }
+  .callout-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .callout.warn { background: #ffb34010; border-color: #ffb34030; color: #c88a30; }
+  .callout.info { background: var(--blue-dim); border-color: #4d9fff28; color: #6aacff; }
+  .callout.success { background: var(--green-dim); border-color: #00e89630; color: #00c87a; }
+  .callout.tip { background: var(--purple-dim); border-color: #b06fff28; color: #9b5ce6; }
+
+  /* ── SEQUENCE DIAGRAM ── */
+  .seq { margin: 20px 0; }
+  .seq-row {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+  .seq-actor {
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--text-dimmer);
+    text-align: right;
+    padding-top: 4px;
+  }
+  .seq-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-radius: 5px;
+    font-size: 12px;
+  }
+  .seq-msg { color: var(--text-dim); flex: 1; }
+  .seq-detail { font-size: 10px; color: var(--text-dimmer); }
+
+  /* ── SUMMARY GRID ── */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 60px;
+    padding-top: 40px;
+    border-top: 1px solid var(--border);
+  }
+  .summary-card {
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .summary-card .sc-num {
+    font-family: var(--sans);
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .summary-card .sc-label {
+    font-size: 11px;
+    color: var(--text-dimmer);
+    letter-spacing: 1px;
+  }
+  .summary-card .sc-desc {
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  /* ── FOOTER ── */
+  .footer {
+    padding: 40px 60px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: gap;
+    font-size: 11px;
+    color: var(--text-dimmer);
+  }
+
+  @media (max-width: 700px) {
+    .hero, .content, .nav, .footer { padding-left: 20px; padding-right: 20px; }
+    .phase-header { flex-direction: column; gap: 8px; }
+    .flow-row { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-label">// Infrastructure Deep Dive · Pulumi + AWS</div>
+  <h1>From Code to<br><span>Running Cluster</span></h1>
+  <p class="hero-sub">A detailed walkthrough of how the VPC, subnets, EC2 instances, NAT gateway, SSH tunnels, bash scripts, and automated health checks are all wired together using Pulumi IaC.</p>
+  <div class="hero-meta">
+    <div class="meta-pill"><span class="dot" style="background:var(--green)"></span>AWS ap-southeast-1a</div>
+    <div class="meta-pill"><span class="dot" style="background:var(--blue)"></span>Pulumi Python</div>
+    <div class="meta-pill"><span class="dot" style="background:var(--amber)"></span>Node.js + MySQL</div>
+    <div class="meta-pill"><span class="dot" style="background:var(--pink)"></span>5 Phases · 18 Steps</div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav class="nav">
+  <a href="#vpc-diagram"><span class="nav-num">00</span> VPC Diagram</a>
+  <a href="#seq-diagram"><span class="nav-num">00</span> Build Sequence</a>
+  <a href="#ssh-proxyjump"><span class="nav-num">00</span> SSH ProxyJump</a>
+  <a href="#packet-flow"><span class="nav-num">00</span> Packet Flow</a>
+  <a href="#phase1" class="active"><span class="nav-num">01</span> VPC & Network</a>
+  <a href="#phase2"><span class="nav-num">02</span> Security Groups</a>
+  <a href="#phase3"><span class="nav-num">03</span> EC2 & SSH Inject</a>
+  <a href="#phase4"><span class="nav-num">04</span> Script Push & Run</a>
+  <a href="#phase5"><span class="nav-num">05</span> Automation Check</a>
+</nav>
+
+<div class="content">
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PHASE 1: VPC & NETWORK -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="phase" id="phase1">
+  <div class="phase-header">
+    <div class="phase-num">PHASE 01</div>
+    <div class="phase-title-wrap">
+      <h2><span class="phase-accent" style="background:var(--green)"></span>VPC &amp; Network Infrastructure</h2>
+      <p>Pulumi provisions the entire network layer before any server is created. Everything lives inside a logically isolated VPC with two subnets — one public (internet-facing) and one private (DB-only).</p>
+    </div>
+  </div>
+
+  <div class="steps">
+
+    <!-- STEP 1.1 -->
+    <div class="step open">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-green">VPC</div>
+        <div class="step-title">Create the VPC — 10.0.0.0/16</div>
+        <span class="step-badge" style="background:var(--green-dim);color:var(--green);border:1px solid #00e89630">FIRST</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">A VPC is a private, isolated network inside AWS. The CIDR block <code>10.0.0.0/16</code> gives 65,536 IP addresses to work with. DNS support and hostnames are enabled so that EC2 instances can resolve each other by hostname rather than just IP.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">__main__.py — VPC</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="v">vpc</span> = aws.ec2.<span class="fn">Vpc</span>(
+    <span class="s">'nodejs-db-vpc'</span>,
+    <span class="v">cidr_block</span>=<span class="s">'10.0.0.0/16'</span>,       <span class="c"># 65,536 available IPs</span>
+    <span class="v">enable_dns_support</span>=<span class="k">True</span>,         <span class="c"># instances can resolve DNS</span>
+    <span class="v">enable_dns_hostnames</span>=<span class="k">True</span>,       <span class="c"># assigns .compute.internal hostnames</span>
+    <span class="v">tags</span>={<span class="s">'Name'</span>: <span class="s">'nodejs-db-vpc'</span>}
+)</pre></div>
+        </div>
+        <div class="annotations">
+          <div class="ann green"><div class="ann-title">CIDR 10.0.0.0/16</div>The /16 prefix means the first two octets (10.0) are fixed, giving 256×256 = 65,536 addresses for internal use.</div>
+          <div class="ann blue"><div class="ann-title">DNS Hostnames</div>Each EC2 instance gets a hostname like <code>ip-10-0-1-45.ap-southeast-1.compute.internal</code>, useful for service discovery.</div>
+          <div class="ann amber"><div class="ann-title">Isolation</div>Nothing outside the VPC can communicate with resources inside it unless you explicitly open a route (IGW, NAT, VPN).</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 1.2 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-blue">SUB</div>
+        <div class="step-title">Carve two subnets — public (10.0.1.0/24) &amp; private (10.0.2.0/24)</div>
+        <span class="step-badge" style="background:var(--blue-dim);color:var(--blue);border:1px solid #4d9fff28">NETWORK</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">Subnets divide the VPC address space into smaller segments. The public subnet allows instances to get public IPs (<code>map_public_ip_on_launch=True</code>). The private subnet never assigns public IPs — instances there are unreachable from the internet directly.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">Public subnet</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="v">public_subnet</span> = aws.ec2.<span class="fn">Subnet</span>(
+    <span class="s">'nodejs-public-subnet'</span>,
+    <span class="v">vpc_id</span>=vpc.id,
+    <span class="v">cidr_block</span>=<span class="s">'10.0.1.0/24'</span>,          <span class="c"># 256 IPs for Node.js server</span>
+    <span class="v">map_public_ip_on_launch</span>=<span class="k">True</span>,      <span class="c"># auto-assign public IP to instances</span>
+    <span class="v">availability_zone</span>=<span class="s">'ap-southeast-1a'</span>
+)</pre></div>
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">Private subnet</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="v">private_subnet</span> = aws.ec2.<span class="fn">Subnet</span>(
+    <span class="s">'db-private-subnet'</span>,
+    <span class="v">vpc_id</span>=vpc.id,
+    <span class="v">cidr_block</span>=<span class="s">'10.0.2.0/24'</span>,          <span class="c"># 256 IPs for DB server</span>
+    <span class="v">map_public_ip_on_launch</span>=<span class="k">False</span>,     <span class="c"># NO public IP ever</span>
+    <span class="v">availability_zone</span>=<span class="s">'ap-southeast-1a'</span>
+)</pre></div>
+        </div>
+        <table class="info-table">
+          <thead><tr><th>Attribute</th><th>Public Subnet</th><th>Private Subnet</th></tr></thead>
+          <tbody>
+            <tr><td>CIDR</td><td>10.0.1.0/24</td><td>10.0.2.0/24</td></tr>
+            <tr><td>Public IP</td><td>Yes (auto)</td><td>No</td></tr>
+            <tr><td>Internet route</td><td>→ Internet Gateway</td><td>→ NAT Gateway</td></tr>
+            <tr><td>Who lives here</td><td>Node.js EC2</td><td>DB EC2</td></tr>
+            <tr><td>Reachable from internet</td><td>Yes (port 22, 3000)</td><td>No</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- STEP 1.3 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-amber">IGW</div>
+        <div class="step-title">Internet Gateway — bidirectional door to the internet</div>
+        <span class="step-badge" style="background:var(--amber-dim);color:var(--amber);border:1px solid #ffb34030">ROUTING</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">The Internet Gateway (IGW) is attached to the VPC and acts as the router between your VPC and the public internet. It performs NAT for instances with public IPs and routes external traffic in. Without it, nothing in the VPC can reach the internet — even with a public IP assigned.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">Internet Gateway</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="v">internet_gateway</span> = aws.ec2.<span class="fn">InternetGateway</span>(
+    <span class="s">'nodejs-db-internet-gateway'</span>,
+    <span class="v">vpc_id</span>=vpc.id,   <span class="c"># attaches to your VPC</span>
+    <span class="v">tags</span>={<span class="s">'Name'</span>: <span class="s">'nodejs-db-internet-gateway'</span>}
+)</pre></div>
+        </div>
+        <div class="flow-diagram">
+          <div class="flow-row">
+            <div class="flow-box fb-blue">Internet</div>
+            <div class="flow-arrow">⟷</div>
+            <div class="flow-box fb-amber">Internet Gateway</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-box fb-green">Public Subnet 10.0.1.0/24</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-box fb-purple">Node.js EC2</div>
+          </div>
+        </div>
+        <div class="callout info">
+          <span class="callout-icon">ℹ</span>
+          <div>The IGW is <strong>bidirectional</strong> — internet can initiate connections to your Node.js server (port 3000, 22) and your Node.js server can reach out to the internet for package installs, npm, etc.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 1.4 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-pink">NAT</div>
+        <div class="step-title">NAT Gateway + Elastic IP — one-way exit for private subnet</div>
+        <span class="step-badge" style="background:var(--pink-dim);color:var(--pink);border:1px solid #ff5fa030">CRITICAL</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">The NAT Gateway lives in the <strong>public subnet</strong> and has an Elastic IP attached. Private subnet instances (DB server) send all outbound traffic to NAT, which rewrites the source IP to the Elastic IP, forwards the packet through IGW, and translates responses back. The internet only ever sees the Elastic IP — never the DB's private IP. Crucially, the internet cannot initiate a connection to the DB server through NAT.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">Elastic IP + NAT Gateway</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="c"># Step 1: Allocate a static public IP</span>
+<span class="v">elastic_ip</span> = aws.ec2.<span class="fn">Eip</span>(<span class="s">'nat-eip'</span>)
+
+<span class="c"># Step 2: Create NAT Gateway IN THE PUBLIC SUBNET (critical!)</span>
+<span class="v">nat_gateway</span> = aws.ec2.<span class="fn">NatGateway</span>(
+    <span class="s">'nat-gateway'</span>,
+    <span class="v">allocation_id</span>=elastic_ip.id,   <span class="c"># bind the Elastic IP</span>
+    <span class="v">subnet_id</span>=public_subnet.id,    <span class="c"># MUST be public — needs IGW access</span>
+    <span class="v">tags</span>={<span class="s">'Name'</span>: <span class="s">'nodejs-db-nat-gateway'</span>}
+)</pre></div>
+        </div>
+        <div class="callout warn">
+          <span class="callout-icon">⚠</span>
+          <div><strong>Why public subnet?</strong> NAT itself needs to reach the internet to forward packets on behalf of the DB server. If you placed NAT in the private subnet, it would have no route to the internet — it would be a dead end. The public subnet has the IGW route, so NAT can get out.</div>
+        </div>
+        <div class="flow-diagram">
+          <div class="flow-row">
+            <div class="flow-box fb-pink">DB Server (10.0.2.x)</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-label">private RT 0.0.0.0/0→NAT</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-box fb-amber">NAT GW (public subnet)</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-label">rewrites src=Elastic IP</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-box fb-blue">Internet</div>
+          </div>
+          <div class="flow-row" style="margin-top:12px">
+            <div class="flow-box fb-blue">Internet reply</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-box fb-amber">NAT GW</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-label">translates back to 10.0.2.x</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-box fb-pink">DB Server</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 1.5 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-purple">RT</div>
+        <div class="step-title">Route Tables — the traffic decision engine</div>
+        <span class="step-badge" style="background:var(--purple-dim);color:var(--purple);border:1px solid #b06fff28">ROUTING</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">Route tables are the brains of subnet networking. Each subnet is associated with exactly one route table. When a packet leaves an instance, AWS checks the route table — longest prefix match wins. The <code>10.0.0.0/16 → local</code> entry handles all intra-VPC traffic. The <code>0.0.0.0/0</code> catch-all sends everything else to either IGW or NAT depending on the subnet.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">Public route table (→ IGW)</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="v">public_route_table</span> = aws.ec2.<span class="fn">RouteTable</span>(
+    <span class="s">'public-route-table'</span>,
+    <span class="v">vpc_id</span>=vpc.id,
+    <span class="v">routes</span>=[
+        aws.ec2.<span class="fn">RouteTableRouteArgs</span>(
+            <span class="v">cidr_block</span>=<span class="s">'0.0.0.0/0'</span>,         <span class="c"># all internet traffic</span>
+            <span class="v">gateway_id</span>=internet_gateway.id,   <span class="c"># → Internet Gateway</span>
+        )
+    ],
+)
+<span class="c"># + implicit: 10.0.0.0/16 → local (auto-added by AWS)</span>
+
+<span class="c"># Associate with public subnet</span>
+aws.ec2.<span class="fn">RouteTableAssociation</span>(
+    <span class="s">'public-route-table-association'</span>,
+    <span class="v">subnet_id</span>=public_subnet.id,
+    <span class="v">route_table_id</span>=public_route_table.id
+)</pre></div>
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">Private route table (→ NAT)</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="v">private_route_table</span> = aws.ec2.<span class="fn">RouteTable</span>(
+    <span class="s">'private-route-table'</span>,
+    <span class="v">vpc_id</span>=vpc.id,
+    <span class="v">routes</span>=[
+        aws.ec2.<span class="fn">RouteTableRouteArgs</span>(
+            <span class="v">cidr_block</span>=<span class="s">'0.0.0.0/0'</span>,          <span class="c"># all internet traffic</span>
+            <span class="v">nat_gateway_id</span>=nat_gateway.id,    <span class="c"># → NAT Gateway (not IGW!)</span>
+        )
+    ],
+)
+<span class="c"># Associate with private subnet</span>
+aws.ec2.<span class="fn">RouteTableAssociation</span>(
+    <span class="s">'private-route-table-association'</span>,
+    <span class="v">subnet_id</span>=private_subnet.id,
+    <span class="v">route_table_id</span>=private_route_table.id
+)</pre></div>
+        </div>
+        <table class="info-table">
+          <thead><tr><th>Route Table</th><th>Destination</th><th>Target</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td>Public RT</td><td>10.0.0.0/16</td><td>local</td><td>VPC-internal traffic stays inside</td></tr>
+            <tr><td>Public RT</td><td>0.0.0.0/0</td><td>igw-xxxxx</td><td>All other traffic → internet (bidirectional)</td></tr>
+            <tr><td>Private RT</td><td>10.0.0.0/16</td><td>local</td><td>VPC-internal traffic stays inside</td></tr>
+            <tr><td>Private RT</td><td>0.0.0.0/0</td><td>nat-xxxxx</td><td>All other traffic → NAT (outbound only)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PHASE 2: SECURITY GROUPS -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="phase" id="phase2">
+  <div class="phase-header">
+    <div class="phase-num">PHASE 02</div>
+    <div class="phase-title-wrap">
+      <h2><span class="phase-accent" style="background:var(--amber)"></span>Security Groups — Firewall Rules</h2>
+      <p>Security groups are stateful firewalls attached to EC2 instances. Each instance can have multiple groups. Inbound rules control who can connect; outbound rules control where the instance can reach. AWS automatically allows return traffic for established connections.</p>
+    </div>
+  </div>
+
+  <div class="steps">
+
+    <!-- STEP 2.1 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-green">NSG</div>
+        <div class="step-title">Node.js Security Group — public-facing ports</div>
+        <span class="step-badge" style="background:var(--green-dim);color:var(--green);border:1px solid #00e89630">PUBLIC</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">The Node.js server is intentionally internet-facing. Port 22 allows SSH from anywhere (in production you'd restrict this to your IP). Port 3000 is the application port. All outbound traffic is allowed so the server can install packages, call APIs, reach the DB, etc.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">nodejs-security-group</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="v">nodejs_security_group</span> = aws.ec2.<span class="fn">SecurityGroup</span>(
+    <span class="s">'nodejs-security-group'</span>,
+    <span class="v">vpc_id</span>=vpc.id,
+    <span class="v">ingress</span>=[
+        <span class="c"># SSH — allows you to log in and push scripts</span>
+        aws.ec2.<span class="fn">SecurityGroupIngressArgs</span>(
+            <span class="v">protocol</span>=<span class="s">'tcp'</span>, <span class="v">from_port</span>=<span class="n">22</span>, <span class="v">to_port</span>=<span class="n">22</span>,
+            <span class="v">cidr_blocks</span>=[<span class="s">'0.0.0.0/0'</span>],   <span class="c"># ⚠ restrict to your IP in prod</span>
+        ),
+        <span class="c"># App port — clients connect to Node.js app here</span>
+        aws.ec2.<span class="fn">SecurityGroupIngressArgs</span>(
+            <span class="v">protocol</span>=<span class="s">'tcp'</span>, <span class="v">from_port</span>=<span class="n">3000</span>, <span class="v">to_port</span>=<span class="n">3000</span>,
+            <span class="v">cidr_blocks</span>=[<span class="s">'0.0.0.0/0'</span>],
+        ),
+    ],
+    <span class="v">egress</span>=[
+        <span class="c"># All outbound allowed — npm, apt, DB connections</span>
+        aws.ec2.<span class="fn">SecurityGroupEgressArgs</span>(
+            <span class="v">protocol</span>=<span class="s">'-1'</span>, <span class="v">from_port</span>=<span class="n">0</span>, <span class="v">to_port</span>=<span class="n">0</span>,
+            <span class="v">cidr_blocks</span>=[<span class="s">'0.0.0.0/0'</span>],
+        )
+    ],
+)</pre></div>
+        </div>
+        <table class="info-table">
+          <thead><tr><th>Direction</th><th>Port</th><th>Source/Dest</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>Inbound</td><td>22 (TCP)</td><td>0.0.0.0/0</td><td>SSH from your laptop / CI system</td></tr>
+            <tr><td>Inbound</td><td>3000 (TCP)</td><td>0.0.0.0/0</td><td>Node.js application traffic</td></tr>
+            <tr><td>Outbound</td><td>All</td><td>0.0.0.0/0</td><td>npm, apt, MySQL on 3306 to DB</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- STEP 2.2 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-pink">DSG</div>
+        <div class="step-title">DB Security Group — locked to public subnet only</div>
+        <span class="step-badge" style="background:var(--pink-dim);color:var(--pink);border:1px solid #ff5fa030">PRIVATE</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">The DB server's security group only accepts connections from the public subnet CIDR <code>10.0.1.0/24</code> — meaning only the Node.js server can reach it. No internet traffic, no other VPC, nothing else. Port 3306 (MySQL) and port 22 (SSH via ProxyJump) are both restricted to the same CIDR.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">db-security-group</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="v">db_security_group</span> = aws.ec2.<span class="fn">SecurityGroup</span>(
+    <span class="s">'db-security-group'</span>,
+    <span class="v">vpc_id</span>=vpc.id,
+    <span class="v">ingress</span>=[
+        <span class="c"># SSH only from public subnet — ProxyJump arrives from 10.0.1.x</span>
+        aws.ec2.<span class="fn">SecurityGroupIngressArgs</span>(
+            <span class="v">protocol</span>=<span class="s">'tcp'</span>, <span class="v">from_port</span>=<span class="n">22</span>, <span class="v">to_port</span>=<span class="n">22</span>,
+            <span class="v">cidr_blocks</span>=[public_subnet.cidr_block],  <span class="c"># 10.0.1.0/24</span>
+        ),
+        <span class="c"># MySQL only from public subnet — Node.js app connects here</span>
+        aws.ec2.<span class="fn">SecurityGroupIngressArgs</span>(
+            <span class="v">protocol</span>=<span class="s">'tcp'</span>, <span class="v">from_port</span>=<span class="n">3306</span>, <span class="v">to_port</span>=<span class="n">3306</span>,
+            <span class="v">cidr_blocks</span>=[public_subnet.cidr_block],  <span class="c"># 10.0.1.0/24</span>
+        ),
+    ],
+    <span class="v">egress</span>=[
+        aws.ec2.<span class="fn">SecurityGroupEgressArgs</span>(
+            <span class="v">protocol</span>=<span class="s">'-1'</span>, <span class="v">from_port</span>=<span class="n">0</span>, <span class="v">to_port</span>=<span class="n">0</span>,
+            <span class="v">cidr_blocks</span>=[<span class="s">'0.0.0.0/0'</span>],   <span class="c"># outbound for apt via NAT</span>
+        )
+    ],
+)</pre></div>
+        </div>
+        <div class="callout success">
+          <span class="callout-icon">✓</span>
+          <div>Using <code>public_subnet.cidr_block</code> as the source is a Pulumi output reference — it dynamically resolves to <code>10.0.1.0/24</code> after the subnet is created. This keeps the config DRY and always in sync.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PHASE 3: EC2 & SSH INJECT -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="phase" id="phase3">
+  <div class="phase-header">
+    <div class="phase-num">PHASE 03</div>
+    <div class="phase-title-wrap">
+      <h2><span class="phase-accent" style="background:var(--blue)"></span>EC2 Instances &amp; SSH Configuration Injection</h2>
+      <p>Two EC2 instances are created. After Pulumi resolves their IPs, it automatically writes an <code>~/.ssh/config</code> file on your local machine — enabling one-command SSH access to both servers, including the private DB server via ProxyJump.</p>
+    </div>
+  </div>
+
+  <div class="steps">
+
+    <!-- STEP 3.1 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-pink">DB</div>
+        <div class="step-title">DB EC2 instance — private subnet, no public IP</div>
+        <span class="step-badge" style="background:var(--pink-dim);color:var(--pink);border:1px solid #ff5fa030">PRIVATE</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">The DB server is provisioned first because the Node.js server's user-data script needs the DB's private IP baked into it. Pulumi creates this instance in the private subnet with no public IP. The key pair <code>db-cluster</code> must already exist in AWS (created with AWS CLI beforehand).</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">DB EC2 instance</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="v">db</span> = aws.ec2.<span class="fn">Instance</span>(
+    <span class="s">'db-server'</span>,
+    <span class="v">instance_type</span>=<span class="s">'t2.micro'</span>,
+    <span class="v">ami</span>=<span class="s">'ami-01811d4912b4ccb26'</span>,    <span class="c"># Ubuntu 22.04 LTS in ap-southeast-1</span>
+    <span class="v">subnet_id</span>=private_subnet.id,   <span class="c"># goes into private subnet</span>
+    <span class="v">key_name</span>=<span class="s">"db-cluster"</span>,         <span class="c"># SSH key pair name in AWS</span>
+    <span class="v">vpc_security_group_ids</span>=[db_security_group.id],
+    <span class="v">tags</span>={<span class="s">'Name'</span>: <span class="s">'db-server'</span>}
+    <span class="c"># No associate_public_ip_address — private only</span>
+)</pre></div>
+        </div>
+        <div class="callout tip">
+          <span class="callout-icon">★</span>
+          <div>Create the key pair first: <code>aws ec2 create-key-pair --key-name db-cluster --output text --query 'KeyMaterial' > ~/.ssh/db-cluster.id_rsa &amp;&amp; chmod 400 ~/.ssh/db-cluster.id_rsa</code>. Both servers share the same key pair for simplicity.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3.2 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-purple">NJS</div>
+        <div class="step-title">Node.js EC2 instance — public subnet, user_data injection</div>
+        <span class="step-badge" style="background:var(--purple-dim);color:var(--purple);border:1px solid #b06fff28">BOOTSTRAP</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">The Node.js EC2 instance gets a <code>user_data</code> script that runs automatically on first boot. This is the mechanism Pulumi uses to "push" configuration into the server without needing a separate SSH session. The script installs Node.js, writes the DB's private IP to <code>/etc/environment</code>, and drops the MySQL health-check script into <code>/usr/local/bin/</code>.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">Node.js EC2 + user_data</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="v">nodejs</span> = aws.ec2.<span class="fn">Instance</span>(
+    <span class="s">'nodejs-server'</span>,
+    <span class="v">instance_type</span>=<span class="s">'t2.micro'</span>,
+    <span class="v">ami</span>=<span class="s">'ami-01811d4912b4ccb26'</span>,
+    <span class="v">subnet_id</span>=public_subnet.id,
+    <span class="v">key_name</span>=<span class="s">"db-cluster"</span>,
+    <span class="v">vpc_security_group_ids</span>=[nodejs_security_group.id],
+    <span class="v">associate_public_ip_address</span>=<span class="k">True</span>,  <span class="c"># gets a public IP</span>
+
+    <span class="c"># user_data is generated AFTER db.private_ip resolves</span>
+    <span class="v">user_data</span>=pulumi.Output.<span class="fn">all</span>(db.private_ip).<span class="fn">apply</span>(
+        <span class="k">lambda</span> args: <span class="fn">generate_nodejs_user_data</span>(args[<span class="n">0</span>])
+    ),
+
+    <span class="c"># if user_data changes, replace the instance</span>
+    <span class="v">user_data_replace_on_change</span>=<span class="k">True</span>,
+    <span class="v">tags</span>={<span class="s">'Name'</span>: <span class="s">'nodejs-server'</span>}
+)</pre></div>
+        </div>
+        <div class="annotations">
+          <div class="ann purple"><div class="ann-title">pulumi.Output.all()</div>Waits for <code>db.private_ip</code> to be resolved (after DB is created) before calling the generator function.</div>
+          <div class="ann blue"><div class="ann-title">.apply(lambda)</div>A callback that fires when the Output resolves — produces the final user_data string with real IP baked in.</div>
+          <div class="ann amber"><div class="ann-title">user_data_replace_on_change</div>If the script changes (e.g. DB IP changes), Pulumi destroys and recreates the Node.js instance with the new script.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3.3 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-cyan" style="background:var(--cyan-dim);border:1px solid #00d4ff22;color:var(--cyan)">SSH</div>
+        <div class="step-title">SSH config auto-injection via Pulumi Output callback</div>
+        <span class="step-badge" style="background:var(--cyan-dim);color:var(--cyan);border:1px solid #00d4ff22">AUTOMATION</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">After both instances are up and IPs are known, Pulumi calls <code>create_config_file()</code> which writes your local <code>~/.ssh/config</code>. This file tells SSH how to reach each host — hostname, username, key file, and crucially the <code>ProxyJump</code> directive that makes DB access transparent.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">SSH config generator (runs locally after pulumi up)</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="k">def</span> <span class="fn">create_config_file</span>(all_ips):
+    config_content = <span class="s">f"""
+Host nodejs-server
+    HostName {all_ips[0]}         # e.g. 54.179.120.45 (public IP)
+    User ubuntu
+    IdentityFile ~/.ssh/db-cluster.id_rsa
+
+Host db-server
+    ProxyJump nodejs-server        # tunnel SSH through nodejs-server
+    HostName {all_ips[1]}         # e.g. 10.0.2.88 (private IP)
+    User ubuntu
+    IdentityFile ~/.ssh/db-cluster.id_rsa
+"""</span>
+    config_path = os.<span class="fn">path.expanduser</span>(<span class="s">"~/.ssh/config"</span>)
+    <span class="k">with</span> <span class="fn">open</span>(config_path, <span class="s">"w"</span>) <span class="k">as</span> config_file:
+        config_file.<span class="fn">write</span>(config_content)
+
+<span class="c"># Wait for both IPs to resolve, then call the function</span>
+all_ips = [nodejs.public_ip, db.private_ip]
+pulumi.Output.<span class="fn">all</span>(*all_ips).<span class="fn">apply</span>(create_config_file)</pre></div>
+        </div>
+        <div class="seq">
+          <div class="seq-row">
+            <div class="seq-actor">pulumi up</div>
+            <div class="seq-line fb-gray"><span class="seq-msg">provisions VPC, subnets, IGW, NAT, SGs, EC2 instances</span><span class="seq-detail">~3-5 min</span></div>
+          </div>
+          <div class="seq-row">
+            <div class="seq-actor">AWS</div>
+            <div class="seq-line fb-blue"><span class="seq-msg">assigns public IP to nodejs-server, private IP to db-server</span></div>
+          </div>
+          <div class="seq-row">
+            <div class="seq-actor">Pulumi Output</div>
+            <div class="seq-line fb-purple"><span class="seq-msg">resolves nodejs.public_ip and db.private_ip</span></div>
+          </div>
+          <div class="seq-row">
+            <div class="seq-actor">.apply() callback</div>
+            <div class="seq-line fb-amber"><span class="seq-msg">calls create_config_file([&quot;54.x.x.x&quot;, &quot;10.0.2.x&quot;])</span></div>
+          </div>
+          <div class="seq-row">
+            <div class="seq-actor">local machine</div>
+            <div class="seq-line fb-green"><span class="seq-msg">~/.ssh/config written with real IPs — SSH ready</span></div>
+          </div>
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">Result: what ~/.ssh/config looks like after pulumi up</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="c"># Auto-generated by Pulumi</span>
+
+Host nodejs-server
+    HostName <span class="n">54.179.120.45</span>          <span class="c"># real public IP filled in</span>
+    User ubuntu
+    IdentityFile ~/.ssh/db-cluster.id_rsa
+
+Host db-server
+    ProxyJump nodejs-server           <span class="c"># SSH tunnels through nodejs first</span>
+    HostName <span class="n">10.0.2.88</span>              <span class="c"># real private IP filled in</span>
+    User ubuntu
+    IdentityFile ~/.ssh/db-cluster.id_rsa</pre></div>
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">How ProxyJump works — step by step</span></div>
+          <div class="code-body"><pre><span class="c"># Command you type:</span>
+ssh db-server
+
+<span class="c"># What SSH does internally:</span>
+<span class="c"># 1. Reads ~/.ssh/config, finds "Host db-server"</span>
+<span class="c"># 2. Sees ProxyJump=nodejs-server</span>
+<span class="c"># 3. Opens TCP connection to 54.179.120.45:22  (nodejs public IP)</span>
+<span class="c"># 4. Authenticates with db-cluster.id_rsa</span>
+<span class="c"># 5. Asks nodejs-server to open a TCP tunnel to 10.0.2.88:22</span>
+<span class="c"># 6. Runs a second SSH session THROUGH that tunnel to db-server</span>
+<span class="c"># 7. Authenticates again with the same key</span>
+<span class="c"># 8. You land in a shell on db-server</span>
+<span class="c"># — the key never leaves your machine (no agent forwarding needed)</span></pre></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PHASE 4: SCRIPT PUSH & RUN -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="phase" id="phase4">
+  <div class="phase-header">
+    <div class="phase-num">PHASE 04</div>
+    <div class="phase-title-wrap">
+      <h2><span class="phase-accent" style="background:var(--purple)"></span>Script Push &amp; Execution via User Data</h2>
+      <p>The MySQL health-check script is read from disk by Pulumi, embedded into the user_data cloud-init script as a heredoc, and written to the Node.js server at boot time. No manual file transfers needed.</p>
+    </div>
+  </div>
+
+  <div class="steps">
+
+    <!-- STEP 4.1 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-green">SH</div>
+        <div class="step-title">The check-mysql.sh script — what it does</div>
+        <span class="step-badge" style="background:var(--green-dim);color:var(--green);border:1px solid #00e89630">BASH</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">This script runs on the Node.js server and checks whether MySQL port 3306 is reachable on the DB server. It uses <code>netcat (nc)</code> because it's lightweight — no MySQL client needed. It retries up to 30 times with 10-second pauses, so it handles the DB taking time to boot up.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">script/check-mysql.sh</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="n">#!/bin/bash</span>
+<span class="v">DB_HOST</span>=<span class="s">"$DB_PRIVATE_IP"</span>   <span class="c"># read from /etc/environment (set at boot)</span>
+<span class="v">DB_PORT</span>=<span class="n">3306</span>
+<span class="v">MAX_RETRIES</span>=<span class="n">30</span>
+<span class="v">RETRY_INTERVAL</span>=<span class="n">10</span>
+
+<span class="fn">check_mysql</span>() {
+    nc -z <span class="s">"$DB_HOST"</span> <span class="s">"$DB_PORT"</span>   <span class="c"># -z = scan only, no data sent</span>
+    <span class="k">return</span> $?                      <span class="c"># returns 0 if port open, 1 if not</span>
+}
+
+<span class="v">retry_count</span>=<span class="n">0</span>
+<span class="k">while</span> [ $retry_count -lt $MAX_RETRIES ]; <span class="k">do</span>
+    <span class="k">if</span> <span class="fn">check_mysql</span>; <span class="k">then</span>
+        echo <span class="s">"Connected to MySQL at $DB_HOST:$DB_PORT"</span>
+        exit <span class="n">0</span>   <span class="c"># success</span>
+    <span class="k">fi</span>
+    echo <span class="s">"Attempt $((retry_count + 1))/$MAX_RETRIES: retrying..."</span>
+    sleep $RETRY_INTERVAL
+    <span class="v">retry_count</span>=$((retry_count + <span class="n">1</span>))
+<span class="k">done</span>
+
+echo <span class="s">"Failed after $MAX_RETRIES attempts"</span>
+exit <span class="n">1</span></pre></div>
+        </div>
+        <div class="annotations">
+          <div class="ann green"><div class="ann-title">nc -z (netcat zero-mode)</div>Opens a TCP connection to port 3306 and immediately closes it. Exit code 0 = port reachable, 1 = refused or timeout.</div>
+          <div class="ann blue"><div class="ann-title">$DB_PRIVATE_IP</div>This environment variable is set at instance boot via <code>/etc/environment</code> by the user_data script — it's the real private IP of the DB server.</div>
+          <div class="ann amber"><div class="ann-title">30 retries × 10s = 5 min</div>Gives MySQL up to 5 minutes to start up. Cloud instances and DB bootstrapping can take time — this prevents false failures.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4.2 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-amber">INJ</div>
+        <div class="step-title">How Pulumi embeds the script into user_data</div>
+        <span class="step-badge" style="background:var(--amber-dim);color:var(--amber);border:1px solid #ffb34030">HEREDOC</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">Pulumi reads <code>check-mysql.sh</code> from disk into a Python string. Then the <code>generate_nodejs_user_data()</code> function builds a cloud-init bash script that embeds the check script using a heredoc (<code>cat &gt; file &lt;&lt; 'EOL' ... EOL</code>). This means the entire script is delivered to the server as part of the launch configuration — zero manual steps.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">Reading script from disk</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="c"># Pulumi reads the script at plan time (on your local machine)</span>
+<span class="k">with</span> <span class="fn">open</span>(<span class="s">'/root/code/script/check-mysql.sh'</span>, <span class="s">'r'</span>) <span class="k">as</span> file:
+    <span class="v">mysql_check_script</span> = file.<span class="fn">read</span>()  <span class="c"># stored as Python string</span></pre></div>
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">generate_nodejs_user_data() — full cloud-init script</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="k">def</span> <span class="fn">generate_nodejs_user_data</span>(db_private_ip):
+    <span class="k">return</span> <span class="s">f'''#!/bin/bash
+exec > >(tee /var/log/user-data.log) 2>&1
+<span class="c"># ↑ logs everything to /var/log/user-data.log for debugging</span>
+
+<span class="c"># 1. Update OS packages</span>
+apt-get update
+apt-get upgrade -y
+apt-get install -y netcat-openbsd   <span class="c"># needed by check-mysql.sh</span>
+
+<span class="c"># 2. Install Node.js 18.x</span>
+curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+apt-get install -y nodejs
+
+<span class="c"># 3. Create bin directory</span>
+mkdir -p /usr/local/bin
+
+<span class="c"># 4. Write DB IP as environment variable (persists across reboots)</span>
+echo "DB_PRIVATE_IP={db_private_ip}" >> /etc/environment
+<span class="c">#                  ↑ real IP injected by Pulumi Output.apply()</span>
+
+<span class="c"># 5. Write check-mysql.sh to disk using heredoc</span>
+cat > /usr/local/bin/check-mysql.sh << 'EOL'
+{mysql_check_script}
+<span class="c">#  ↑ entire script content embedded here as a string</span>
+EOL
+
+<span class="c"># 6. Make it executable</span>
+chmod +x /usr/local/bin/check-mysql.sh
+'''</span></pre></div>
+        </div>
+        <div class="flow-diagram">
+          <div style="font-size:11px;color:var(--text-dimmer);margin-bottom:12px;letter-spacing:1px">SCRIPT DELIVERY PIPELINE</div>
+          <div class="flow-row">
+            <div class="flow-box fb-gray">check-mysql.sh<br><span style="font-size:10px;opacity:0.6">on disk</span></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-box fb-amber">Pulumi reads file<br><span style="font-size:10px;opacity:0.6">Python string</span></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-box fb-purple">f-string template<br><span style="font-size:10px;opacity:0.6">+ DB IP injected</span></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-box fb-blue">AWS user_data field<br><span style="font-size:10px;opacity:0.6">base64 encoded</span></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-box fb-green">cloud-init runs at boot<br><span style="font-size:10px;opacity:0.6">on nodejs-server</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4.3 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-purple">LOG</div>
+        <div class="step-title">Boot sequence on the Node.js server</div>
+        <span class="step-badge" style="background:var(--purple-dim);color:var(--purple);border:1px solid #b06fff28">CLOUD-INIT</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">When the EC2 instance starts, the AWS hypervisor makes the user_data script available via the Instance Metadata Service (IMDS). The cloud-init daemon picks it up, runs it as root, and logs all output. You can watch the log live after SSHing in.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">Boot sequence (happens automatically)</span></div>
+          <div class="code-body"><pre><span class="c"># Timeline on first boot:</span>
+
+<span class="n">T+0s</span>   Instance starts, kernel boots
+<span class="n">T+15s</span>  cloud-init reads user_data from IMDS (169.254.169.254)
+<span class="n">T+20s</span>  Runs: apt-get update  (may take 30-60s)
+<span class="n">T+80s</span>  Runs: apt-get install netcat-openbsd
+<span class="n">T+90s</span>  Runs: curl | bash  (NodeSource setup)
+<span class="n">T+120s</span> Runs: apt-get install nodejs
+<span class="n">T+180s</span> Writes DB_PRIVATE_IP to /etc/environment
+<span class="n">T+181s</span> Writes /usr/local/bin/check-mysql.sh
+<span class="n">T+182s</span> chmod +x
+<span class="n">T+183s</span> cloud-init done ✓
+
+<span class="c"># Verify it worked after SSH-ing in:</span>
+cat /var/log/user-data.log
+cat /usr/local/bin/check-mysql.sh
+cat /etc/environment               <span class="c"># should contain DB_PRIVATE_IP=10.0.2.x</span></pre></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PHASE 5: AUTOMATION CHECK -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="phase" id="phase5">
+  <div class="phase-header">
+    <div class="phase-num">PHASE 05</div>
+    <div class="phase-title-wrap">
+      <h2><span class="phase-accent" style="background:var(--pink)"></span>Automated MySQL Health Check</h2>
+      <p>The check-mysql.sh script on the Node.js server verifies that MySQL is reachable before the application tries to connect. It's a polling loop with exponential context — retry up to 30 times, 10 seconds apart.</p>
+    </div>
+  </div>
+
+  <div class="steps">
+
+    <!-- STEP 5.1 -->
+    <div class="step open">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-green">RUN</div>
+        <div class="step-title">Running the health check manually</div>
+        <span class="step-badge" style="background:var(--green-dim);color:var(--green);border:1px solid #00e89630">VERIFY</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">After SSH-ing into the Node.js server, run the script directly. It reads <code>DB_PRIVATE_IP</code> from the environment and starts polling. A successful run means MySQL is reachable on port 3306 from the Node.js server through the VPC-internal network.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">Execution flow</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="c"># 1. SSH into Node.js server</span>
+ssh nodejs-server
+
+<span class="c"># 2. Load environment (DB_PRIVATE_IP)</span>
+source /etc/environment
+echo $DB_PRIVATE_IP    <span class="c"># should show 10.0.2.x</span>
+
+<span class="c"># 3. Run the check script</span>
+/usr/local/bin/check-mysql.sh
+
+<span class="c"># Example output (MySQL not yet up):</span>
+<span class="v">Attempt 1/30: Cannot connect to MySQL at 10.0.2.88:3306. Retrying in 10 seconds...</span>
+<span class="v">Attempt 2/30: Cannot connect to MySQL at 10.0.2.88:3306. Retrying in 10 seconds...</span>
+
+<span class="c"># Example output (MySQL up):</span>
+<span class="n">Successfully connected to MySQL at 10.0.2.88:3306</span></pre></div>
+        </div>
+        <div class="seq">
+          <div class="seq-row">
+            <div class="seq-actor">check-mysql.sh</div>
+            <div class="seq-line fb-amber"><span class="seq-msg">reads DB_PRIVATE_IP from /etc/environment</span></div>
+          </div>
+          <div class="seq-row">
+            <div class="seq-actor">nc -z</div>
+            <div class="seq-line fb-blue"><span class="seq-msg">opens TCP to 10.0.2.88:3306</span><span class="seq-detail">via VPC local route</span></div>
+          </div>
+          <div class="seq-row">
+            <div class="seq-actor">DB security group</div>
+            <div class="seq-line fb-pink"><span class="seq-msg">allows 3306 from 10.0.1.0/24 (nodejs is 10.0.1.x) ✓</span></div>
+          </div>
+          <div class="seq-row">
+            <div class="seq-actor">MySQL on DB</div>
+            <div class="seq-line fb-green"><span class="seq-msg">accepts TCP on 3306 → nc exits 0 → script exits 0</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 5.2 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-blue">NC</div>
+        <div class="step-title">Why netcat and not mysql client?</div>
+        <span class="step-badge" style="background:var(--blue-dim);color:var(--blue);border:1px solid #4d9fff28">DESIGN</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">Using <code>netcat</code> instead of the MySQL client is intentional. Netcat just tests TCP connectivity — it doesn't need credentials, doesn't install large packages, and works before MySQL is fully initialized. It answers the question: "Is the port open?" not "Can I authenticate?" — which is exactly what a readiness probe needs.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">nc -z explained</span></div>
+          <div class="code-body"><pre><span class="c"># nc = netcat — the TCP/IP Swiss army knife</span>
+<span class="c"># -z = zero I/O mode (just scan, don't send data)</span>
+nc -z <span class="s">"$DB_HOST"</span> <span class="s">"$DB_PORT"</span>
+
+<span class="c"># What happens under the hood:</span>
+<span class="c"># 1. nc opens a TCP socket to DB_HOST:3306</span>
+<span class="c"># 2. Completes TCP handshake (SYN → SYN-ACK → ACK)</span>
+<span class="c"># 3. Immediately closes connection</span>
+<span class="c"># 4. Returns 0 if handshake succeeded, 1 if refused</span>
+
+<span class="c"># Traffic path:</span>
+<span class="c"># nodejs (10.0.1.x) → 10.0.0.0/16 local route → db (10.0.2.x)</span>
+<span class="c"># No internet, no NAT — pure VPC-internal routing</span></pre></div>
+        </div>
+        <table class="info-table">
+          <thead><tr><th>Approach</th><th>Pros</th><th>Cons</th></tr></thead>
+          <tbody>
+            <tr><td>nc -z (chosen)</td><td>No credentials, tiny, fast, works pre-auth</td><td>Only tests TCP, not MySQL itself</td></tr>
+            <tr><td>mysql -e "SELECT 1"</td><td>Tests actual DB access</td><td>Needs client installed, credentials required</td></tr>
+            <tr><td>curl / wget</td><td>N/A for raw TCP ports</td><td>HTTP only</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- STEP 5.3 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <div class="step-icon fb-pink">SSH</div>
+        <div class="step-title">SSH into DB server — final connectivity proof</div>
+        <span class="step-badge" style="background:var(--pink-dim);color:var(--pink);border:1px solid #ff5fa030">END-TO-END</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <p class="step-desc">With the SSH config written and MySQL reachable, the final step is SSH-ing directly to the DB server with a single command. ProxyJump handles the two-hop tunnel transparently. Once inside, you configure MySQL — install the server, set root password, create databases, and grant remote access to the Node.js server's private IP.</p>
+        <div class="code-block">
+          <div class="code-header"><span class="code-label">Complete end-to-end SSH + DB setup</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+          <div class="code-body"><pre><span class="c"># From your laptop — one command, two hops transparently</span>
+ssh db-server
+
+<span class="c"># Now you're on the DB server. Set hostname for clarity:</span>
+sudo hostnamectl set-hostname db-server
+
+<span class="c"># Install MySQL server</span>
+sudo apt-get update
+sudo apt-get install -y mysql-server
+
+<span class="c"># Secure and configure MySQL</span>
+sudo mysql -e <span class="s">"ALTER USER 'root'@'localhost' IDENTIFIED BY 'yourpassword';"</span>
+sudo mysql -e <span class="s">"CREATE DATABASE appdb;"</span>
+sudo mysql -e <span class="s">"CREATE USER 'nodeapp'@'10.0.1.%' IDENTIFIED BY 'apppass';"</span>
+sudo mysql -e <span class="s">"GRANT ALL ON appdb.* TO 'nodeapp'@'10.0.1.%';"</span>
+<span class="c">#                                        ↑ only allow connections from public subnet</span>
+sudo mysql -e <span class="s">"FLUSH PRIVILEGES;"</span>
+
+<span class="c"># Allow MySQL to bind to all interfaces (not just localhost)</span>
+sudo sed -i <span class="s">'s/bind-address.*=.*/bind-address = 0.0.0.0/'</span> /etc/mysql/mysql.conf.d/mysqld.cnf
+sudo systemctl restart mysql
+
+<span class="c"># Back on nodejs-server — verify health check now passes:</span>
+<span class="n">Successfully connected to MySQL at 10.0.2.88:3306</span></pre></div>
+        </div>
+        <div class="callout success">
+          <span class="callout-icon">✓</span>
+          <div>At this point the entire infrastructure is live: VPC, subnets, IGW, NAT Gateway, route tables, security groups, both EC2 servers, SSH config, health check script — all provisioned and configured end-to-end by Pulumi with zero manual AWS console clicks.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- SUMMARY GRID -->
+<div class="summary-grid">
+  <div class="summary-card">
+    <div class="sc-num" style="color:var(--green)">01</div>
+    <div class="sc-label">VPC + 2 SUBNETS</div>
+    <div class="sc-desc">Network isolation with public and private address spaces, DNS enabled</div>
+  </div>
+  <div class="summary-card">
+    <div class="sc-num" style="color:var(--amber)">02</div>
+    <div class="sc-label">IGW + NAT GW</div>
+    <div class="sc-desc">Bidirectional internet for Node.js, outbound-only for DB via Elastic IP</div>
+  </div>
+  <div class="summary-card">
+    <div class="sc-num" style="color:var(--blue)">02</div>
+    <div class="sc-label">SECURITY GROUPS</div>
+    <div class="sc-desc">Node.js: ports 22+3000 public. DB: ports 22+3306 from public subnet only</div>
+  </div>
+  <div class="summary-card">
+    <div class="sc-num" style="color:var(--purple)">02</div>
+    <div class="sc-label">EC2 INSTANCES</div>
+    <div class="sc-desc">t2.micro each. Node.js gets public IP + user_data. DB stays private</div>
+  </div>
+  <div class="summary-card">
+    <div class="sc-num" style="color:var(--pink)">1</div>
+    <div class="sc-label">SSH CONFIG INJECT</div>
+    <div class="sc-desc">Pulumi writes ~/.ssh/config with ProxyJump after IPs resolve</div>
+  </div>
+  <div class="summary-card">
+    <div class="sc-num" style="color:var(--cyan)">30×</div>
+    <div class="sc-label">HEALTH RETRIES</div>
+    <div class="sc-desc">nc polls MySQL port 3306 every 10s for up to 5 minutes</div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- VPC ARCHITECTURE DIAGRAM -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="phase" id="vpc-diagram" style="margin-top:80px;scroll-margin-top:60px;">
+  <div class="phase-header">
+    <div class="phase-num">DIAGRAM</div>
+    <div class="phase-title-wrap">
+      <h2><span class="phase-accent" style="background:var(--cyan)"></span>Full VPC Architecture — What the Python Script Builds</h2>
+      <p>Every box below is created by a single resource in <code>__main__.py</code>. The containment shows real AWS nesting: Internet lives outside, the VPC wraps everything, subnets are carved inside, EC2 instances live in subnets.</p>
+    </div>
+  </div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;overflow-x:auto;">
+    <svg width="100%" viewBox="0 0 900 660" style="min-width:700px;display:block;">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- INTERNET -->
+      <rect x="340" y="10" width="220" height="44" rx="8" fill="#0c447c22" stroke="#378ADD" stroke-width="1"/>
+      <text x="450" y="37" text-anchor="middle" fill="#378ADD" font-size="13" font-weight="600" font-family="'JetBrains Mono',monospace">Internet</text>
+
+      <!-- IGW -->
+      <rect x="320" y="82" width="260" height="44" rx="8" fill="#0c447c15" stroke="#378ADD" stroke-width="0.8" stroke-dasharray="4 2"/>
+      <text x="450" y="99" text-anchor="middle" fill="#85B7EB" font-size="11" font-family="'JetBrains Mono',monospace">aws.ec2.InternetGateway</text>
+      <text x="450" y="115" text-anchor="middle" fill="#378ADD" font-size="12" font-weight="600" font-family="'JetBrains Mono',monospace">Internet Gateway</text>
+
+      <!-- arrow internet <-> igw -->
+      <line x1="450" y1="54" x2="450" y2="82" stroke="#378ADD" stroke-width="1.2" marker-end="url(#arr)" fill="none"/>
+      <line x1="450" y1="54" x2="450" y2="82" stroke="#378ADD" stroke-width="1.2" marker-start="url(#arr2)" fill="none"/>
+
+      <!-- VPC outer box -->
+      <rect x="20" y="148" width="860" height="490" rx="18" fill="#1D9E7508" stroke="#1D9E75" stroke-width="1.2"/>
+      <text x="38" y="172" fill="#1D9E75" font-size="10" font-family="'JetBrains Mono',monospace" letter-spacing="1">VPC  10.0.0.0/16</text>
+      <text x="38" y="187" fill="#5DCAA5" font-size="9" font-family="'JetBrains Mono',monospace">aws.ec2.Vpc( 'nodejs-db-vpc', enable_dns_support=True )</text>
+
+      <!-- Elastic IP pill -->
+      <rect x="36" y="204" width="130" height="34" rx="6" fill="#ffb34018" stroke="#ffb340" stroke-width="0.7"/>
+      <text x="101" y="217" text-anchor="middle" fill="#EF9F27" font-size="9" font-family="'JetBrains Mono',monospace">aws.ec2.Eip</text>
+      <text x="101" y="230" text-anchor="middle" fill="#ffb340" font-size="11" font-weight="600" font-family="'JetBrains Mono',monospace">Elastic IP</text>
+
+      <!-- PUBLIC SUBNET -->
+      <rect x="36" y="252" width="820" height="166" rx="12" fill="#27500A14" stroke="#3B6D11" stroke-width="0.8"/>
+      <text x="54" y="272" fill="#639922" font-size="10" font-family="'JetBrains Mono',monospace" letter-spacing="0.5">PUBLIC SUBNET  10.0.1.0/24  ·  map_public_ip_on_launch=True</text>
+      <text x="54" y="285" fill="#97C459" font-size="9" font-family="'JetBrains Mono',monospace">aws.ec2.Subnet( 'nodejs-public-subnet', availability_zone='ap-southeast-1a' )</text>
+
+      <!-- Public Route Table inside public subnet -->
+      <rect x="54" y="296" width="220" height="106" rx="8" fill="#0F6E5612" stroke="#1D9E75" stroke-width="0.7"/>
+      <text x="164" y="313" text-anchor="middle" fill="#5DCAA5" font-size="9" font-family="'JetBrains Mono',monospace">aws.ec2.RouteTable</text>
+      <text x="164" y="327" text-anchor="middle" fill="#9FE1CB" font-size="11" font-weight="600" font-family="'JetBrains Mono',monospace">Public Route Table</text>
+      <rect x="66" y="337" width="196" height="22" rx="3" fill="#1a1d24" stroke="#2e3240" stroke-width="0.5"/>
+      <text x="88" y="352" fill="#7a7f8e" font-size="10" font-family="'JetBrains Mono',monospace">10.0.0.0/16</text>
+      <text x="210" y="352" text-anchor="end" fill="#5DCAA5" font-size="10" font-family="'JetBrains Mono',monospace">local</text>
+      <rect x="66" y="361" width="196" height="22" rx="3" fill="#ffb34010" stroke="#ffb34030" stroke-width="0.5"/>
+      <text x="88" y="376" fill="#7a7f8e" font-size="10" font-family="'JetBrains Mono',monospace">0.0.0.0/0</text>
+      <text x="210" y="376" text-anchor="end" fill="#ffb340" font-size="10" font-family="'JetBrains Mono',monospace">→ IGW</text>
+
+      <!-- NAT Gateway inside public subnet -->
+      <rect x="290" y="296" width="200" height="106" rx="8" fill="#ffb34014" stroke="#BA7517" stroke-width="0.7"/>
+      <text x="390" y="313" text-anchor="middle" fill="#EF9F27" font-size="9" font-family="'JetBrains Mono',monospace">aws.ec2.NatGateway</text>
+      <text x="390" y="327" text-anchor="middle" fill="#FAC775" font-size="11" font-weight="600" font-family="'JetBrains Mono',monospace">NAT Gateway</text>
+      <text x="390" y="345" text-anchor="middle" fill="#EF9F27" font-size="10" font-family="'JetBrains Mono',monospace">subnet_id=public_subnet</text>
+      <text x="390" y="360" text-anchor="middle" fill="#EF9F27" font-size="10" font-family="'JetBrains Mono',monospace">allocation_id=elastic_ip</text>
+      <text x="390" y="380" text-anchor="middle" fill="#BA7517" font-size="9" font-family="'JetBrains Mono',monospace">Elastic IP: 54.x.x.x (public)</text>
+
+      <!-- NodeJS EC2 inside public subnet -->
+      <rect x="506" y="296" width="332" height="106" rx="8" fill="#534AB710" stroke="#7F77DD" stroke-width="0.7"/>
+      <text x="672" y="313" text-anchor="middle" fill="#AFA9EC" font-size="9" font-family="'JetBrains Mono',monospace">aws.ec2.Instance  ·  t2.micro</text>
+      <text x="672" y="327" text-anchor="middle" fill="#CECBF6" font-size="11" font-weight="600" font-family="'JetBrains Mono',monospace">nodejs-server</text>
+      <text x="672" y="344" text-anchor="middle" fill="#AFA9EC" font-size="10" font-family="'JetBrains Mono',monospace">subnet_id = public_subnet</text>
+      <text x="672" y="359" text-anchor="middle" fill="#AFA9EC" font-size="10" font-family="'JetBrains Mono',monospace">associate_public_ip_address = True</text>
+      <text x="672" y="375" text-anchor="middle" fill="#AFA9EC" font-size="10" font-family="'JetBrains Mono',monospace">key_name = "db-cluster"</text>
+      <rect x="516" y="384" width="160" height="10" rx="3" fill="#534AB720"/>
+      <text x="596" y="393" text-anchor="middle" fill="#7F77DD" font-size="9" font-family="'JetBrains Mono',monospace">SG: port 22, 3000 open to 0.0.0.0/0</text>
+
+      <!-- PRIVATE SUBNET -->
+      <rect x="36" y="434" width="820" height="186" rx="12" fill="#993C1D0d" stroke="#993C1D" stroke-width="0.8"/>
+      <text x="54" y="454" fill="#D85A30" font-size="10" font-family="'JetBrains Mono',monospace" letter-spacing="0.5">PRIVATE SUBNET  10.0.2.0/24  ·  map_public_ip_on_launch=False</text>
+      <text x="54" y="467" fill="#F0997B" font-size="9" font-family="'JetBrains Mono',monospace">aws.ec2.Subnet( 'db-private-subnet', availability_zone='ap-southeast-1a' )</text>
+
+      <!-- Private Route Table -->
+      <rect x="54" y="478" width="220" height="126" rx="8" fill="#99351614" stroke="#D4537E" stroke-width="0.7"/>
+      <text x="164" y="495" text-anchor="middle" fill="#ED93B1" font-size="9" font-family="'JetBrains Mono',monospace">aws.ec2.RouteTable</text>
+      <text x="164" y="509" text-anchor="middle" fill="#F4C0D1" font-size="11" font-weight="600" font-family="'JetBrains Mono',monospace">Private Route Table</text>
+      <rect x="66" y="518" width="196" height="22" rx="3" fill="#1a1d24" stroke="#2e3240" stroke-width="0.5"/>
+      <text x="88" y="533" fill="#7a7f8e" font-size="10" font-family="'JetBrains Mono',monospace">10.0.0.0/16</text>
+      <text x="210" y="533" text-anchor="end" fill="#ED93B1" font-size="10" font-family="'JetBrains Mono',monospace">local</text>
+      <rect x="66" y="542" width="196" height="22" rx="3" fill="#ffb34010" stroke="#ffb34030" stroke-width="0.5"/>
+      <text x="88" y="557" fill="#7a7f8e" font-size="10" font-family="'JetBrains Mono',monospace">0.0.0.0/0</text>
+      <text x="210" y="557" text-anchor="end" fill="#ffb340" font-size="10" font-family="'JetBrains Mono',monospace">→ NAT GW</text>
+      <text x="164" y="590" text-anchor="middle" fill="#D4537E" font-size="9" font-family="'JetBrains Mono',monospace">RouteTableAssociation</text>
+      <text x="164" y="602" text-anchor="middle" fill="#D4537E" font-size="9" font-family="'JetBrains Mono',monospace">subnet_id=private_subnet</text>
+
+      <!-- DB EC2 inside private subnet -->
+      <rect x="290" y="478" width="548" height="126" rx="8" fill="#993C1D10" stroke="#D85A30" stroke-width="0.7"/>
+      <text x="564" y="495" text-anchor="middle" fill="#F0997B" font-size="9" font-family="'JetBrains Mono',monospace">aws.ec2.Instance  ·  t2.micro  ·  NO public IP</text>
+      <text x="564" y="509" text-anchor="middle" fill="#F5C4B3" font-size="11" font-weight="600" font-family="'JetBrains Mono',monospace">db-server</text>
+      <text x="564" y="526" text-anchor="middle" fill="#F0997B" font-size="10" font-family="'JetBrains Mono',monospace">subnet_id = private_subnet</text>
+      <text x="564" y="541" text-anchor="middle" fill="#F0997B" font-size="10" font-family="'JetBrains Mono',monospace">vpc_security_group_ids = [db_security_group]</text>
+      <text x="564" y="556" text-anchor="middle" fill="#F0997B" font-size="10" font-family="'JetBrains Mono',monospace">key_name = "db-cluster"</text>
+      <text x="564" y="571" text-anchor="middle" fill="#D85A30" font-size="9" font-family="'JetBrains Mono',monospace">SG: port 22, 3306 from 10.0.1.0/24 only</text>
+      <text x="564" y="587" text-anchor="middle" fill="#D85A30" font-size="9" font-family="'JetBrains Mono',monospace">private_ip = 10.0.2.x  (no internet access)</text>
+
+      <!-- IGW arrow down to public subnet -->
+      <line x1="450" y1="126" x2="450" y2="252" stroke="#378ADD" stroke-width="1" stroke-dasharray="4 2" marker-end="url(#arr)" fill="none"/>
+
+      <!-- NAT arrow up to IGW area -->
+      <line x1="390" y1="296" x2="390" y2="252" stroke="#BA7517" stroke-width="1" stroke-dasharray="3 2" marker-end="url(#arr)" fill="none"/>
+
+      <!-- DB arrow up to NAT (outbound) -->
+      <line x1="400" y1="478" x2="400" y2="402" stroke="#BA7517" stroke-width="1" stroke-dasharray="3 2" marker-end="url(#arr)" fill="none"/>
+      <text x="410" y="445" fill="#BA7517" font-size="9" font-family="'JetBrains Mono',monospace">outbound via NAT</text>
+
+      <!-- SSH ProxyJump arrow nodejs->db -->
+      <line x1="506" y1="370" x2="390" y2="478" stroke="#7F77DD" stroke-width="1" stroke-dasharray="5 3" marker-end="url(#arr)" fill="none"/>
+      <text x="448" y="430" fill="#7F77DD" font-size="9" font-family="'JetBrains Mono',monospace">SSH ProxyJump</text>
+      <text x="448" y="441" fill="#7F77DD" font-size="9" font-family="'JetBrains Mono',monospace">port 22 → 3306</text>
+
+      <!-- Elastic IP arrow to NAT -->
+      <line x1="166" y1="238" x2="320" y2="320" stroke="#BA7517" stroke-width="0.8" stroke-dasharray="3 2" marker-end="url(#arr)" fill="none"/>
+      <text x="220" y="270" fill="#BA7517" font-size="9" font-family="'JetBrains Mono',monospace">allocation_id</text>
+
+      <!-- Pulumi export labels -->
+      <text x="840" y="322" text-anchor="end" fill="#454a57" font-size="9" font-family="'JetBrains Mono',monospace">export: nodejs_public_ip</text>
+      <text x="840" y="334" text-anchor="end" fill="#454a57" font-size="9" font-family="'JetBrains Mono',monospace">export: nodejs_private_ip</text>
+      <text x="840" y="562" text-anchor="end" fill="#454a57" font-size="9" font-family="'JetBrains Mono',monospace">export: db_private_ip</text>
+
+      <!-- legend -->
+      <rect x="36" y="630" width="8" height="8" rx="2" fill="#1D9E7530" stroke="#1D9E75" stroke-width="0.7"/>
+      <text x="50" y="639" fill="#5DCAA5" font-size="9" font-family="'JetBrains Mono',monospace">Public subnet</text>
+      <rect x="130" y="630" width="8" height="8" rx="2" fill="#993C1D20" stroke="#993C1D" stroke-width="0.7"/>
+      <text x="144" y="639" fill="#F0997B" font-size="9" font-family="'JetBrains Mono',monospace">Private subnet</text>
+      <line x1="224" y1="634" x2="244" y2="634" stroke="#7F77DD" stroke-width="1" stroke-dasharray="4 2" marker-end="url(#arr)"/>
+      <text x="250" y="639" fill="#AFA9EC" font-size="9" font-family="'JetBrains Mono',monospace">SSH tunnel</text>
+      <line x1="310" y1="634" x2="330" y2="634" stroke="#BA7517" stroke-width="1" stroke-dasharray="3 2" marker-end="url(#arr)"/>
+      <text x="336" y="639" fill="#EF9F27" font-size="9" font-family="'JetBrains Mono',monospace">Outbound/NAT</text>
+      <line x1="418" y1="634" x2="438" y2="634" stroke="#378ADD" stroke-width="1" marker-end="url(#arr)"/>
+      <text x="444" y="639" fill="#85B7EB" font-size="9" font-family="'JetBrains Mono',monospace">Internet route</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- ANIMATED SEQUENCE DIAGRAM -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="phase" id="seq-diagram" style="margin-top:80px;scroll-margin-top:60px;">
+  <div class="phase-header">
+    <div class="phase-num">SEQUENCE</div>
+    <div class="phase-title-wrap">
+      <h2><span class="phase-accent" style="background:var(--pink)"></span>Step-by-step: How the Python Script Builds Everything &amp; SSH is Established</h2>
+      <p>Press <strong>Play</strong> to watch every step fire in order — from <code>pulumi up</code> to landing in a shell on the private DB server. Each step shows exactly which line of <code>__main__.py</code> is responsible.</p>
+    </div>
+  </div>
+
+  <style>
+    .seq-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .seq-controls { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .seq-btn { background: none; border: 1px solid var(--border2); color: var(--text-dim); font-family: var(--mono); font-size: 11px; padding: 6px 16px; border-radius: 4px; cursor: pointer; transition: all .15s; }
+    .seq-btn:hover { border-color: var(--green); color: var(--green); }
+    .seq-btn.active { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+    .seq-progress { flex: 1; height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .seq-progress-fill { height: 100%; background: var(--green); transition: width .4s ease; width: 0%; }
+    .seq-counter { font-size: 11px; color: var(--text-dimmer); min-width: 60px; text-align: right; }
+    .seq-diagram-wrap { padding: 24px 20px; }
+    .seq-actors { display: grid; grid-template-columns: 120px 1fr 1fr 1fr 1fr; gap: 0; margin-bottom: 0; }
+    .actor-head { padding: 8px 6px; text-align: center; font-size: 10px; letter-spacing: 0.5px; font-family: var(--mono); border-bottom: 2px solid; }
+    .actor-head.a-pulumi { color: #00e896; border-color: #00e896; }
+    .actor-head.a-aws { color: #378ADD; border-color: #378ADD; }
+    .actor-head.a-nodejs { color: #b06fff; border-color: #b06fff; }
+    .actor-head.a-db { color: #D85A30; border-color: #D85A30; }
+    .actor-head.a-you { color: #ffb340; border-color: #ffb340; }
+    .seq-rows { display: flex; flex-direction: column; gap: 0; }
+    .seq-step-row { display: grid; grid-template-columns: 120px 1fr 1fr 1fr 1fr; border-top: 1px solid var(--border); opacity: 0.18; transition: opacity .35s, background .35s; }
+    .seq-step-row.lit { opacity: 1; }
+    .seq-step-row.done { opacity: 0.45; }
+    .seq-step-row.current { background: #ffffff07; }
+    .seq-step-num { padding: 10px 8px; font-size: 10px; color: var(--text-dimmer); font-family: var(--mono); display: flex; align-items: flex-start; padding-top: 14px; }
+    .seq-cell { padding: 10px 6px; position: relative; font-size: 11px; font-family: var(--mono); }
+    .seq-msg-box { padding: 6px 10px; border-radius: 4px; font-size: 11px; line-height: 1.5; border: 1px solid; }
+    .seq-msg-box.pulumi { background: #00e89610; border-color: #00e89630; color: #00e896; }
+    .seq-msg-box.aws { background: #378ADD10; border-color: #378ADD30; color: #85B7EB; }
+    .seq-msg-box.nodejs { background: #b06fff10; border-color: #b06fff30; color: #b06fff; }
+    .seq-msg-box.db { background: #D85A3010; border-color: #D85A3030; color: #F0997B; }
+    .seq-msg-box.you { background: #ffb34010; border-color: #ffb34030; color: #ffb340; }
+    .seq-msg-box.ssh { background: #00d4ff10; border-color: #00d4ff30; color: #00d4ff; }
+    .seq-code-inline { font-size: 10px; color: var(--text-dimmer); margin-top: 4px; }
+    .arrow-span { position: absolute; top: 50%; height: 1px; background: currentColor; opacity: 0.4; transition: width .3s ease; }
+  </style>
+
+  <div class="seq-wrap">
+    <div class="seq-controls">
+      <button class="seq-btn active" id="playBtn" onclick="seqPlay()">&#9654; Play</button>
+      <button class="seq-btn" onclick="seqReset()">&#8635; Reset</button>
+      <div class="seq-progress"><div class="seq-progress-fill" id="seqFill"></div></div>
+      <div class="seq-counter" id="seqCounter">0 / 18</div>
+    </div>
+    <div class="seq-diagram-wrap">
+      <div class="seq-actors">
+        <div class="actor-head" style="color:var(--text-dimmer);border-color:var(--border2)">Step</div>
+        <div class="actor-head a-pulumi">Pulumi / Python</div>
+        <div class="actor-head a-aws">AWS API</div>
+        <div class="actor-head a-nodejs">nodejs-server</div>
+        <div class="actor-head a-db">db-server</div>
+        <div class="actor-head a-you">Your Laptop</div>
+      </div>
+      <div class="seq-rows" id="seqRows"></div>
+    </div>
+  </div>
+</section>
+
+<script>
+const STEPS = [
+  { num:'01', actor:'pulumi', col:1, msg:'pulumi up --yes', code:'reads __main__.py, builds dependency graph', cls:'pulumi' },
+  { num:'02', actor:'pulumi', col:1, msg:'aws.ec2.Vpc() called', code:"cidr='10.0.0.0/16', dns_support=True", cls:'pulumi' },
+  { num:'03', actor:'aws',    col:2, msg:'VPC created: vpc-xxxxxxx', code:'10.0.0.0/16 isolated network ready', cls:'aws' },
+  { num:'04', actor:'pulumi', col:1, msg:'aws.ec2.Subnet × 2 called', code:'public 10.0.1.0/24 + private 10.0.2.0/24', cls:'pulumi' },
+  { num:'05', actor:'aws',    col:2, msg:'2 subnets provisioned', code:'public: map_public_ip=True  private: False', cls:'aws' },
+  { num:'06', actor:'pulumi', col:1, msg:'InternetGateway + Eip + NatGateway', code:'NAT gets Elastic IP, placed in public subnet', cls:'pulumi' },
+  { num:'07', actor:'aws',    col:2, msg:'IGW attached, NAT GW active', code:'Elastic IP allocated: 54.x.x.x', cls:'aws' },
+  { num:'08', actor:'pulumi', col:1, msg:'RouteTable × 2 + Associations', code:'public→IGW  private→NAT  both associated', cls:'pulumi' },
+  { num:'09', actor:'aws',    col:2, msg:'Routing rules live', code:'0.0.0.0/0→IGW (public)  0.0.0.0/0→NAT (private)', cls:'aws' },
+  { num:'10', actor:'pulumi', col:1, msg:'SecurityGroup × 2 created', code:'nodejs SG: 22,3000 open  db SG: 22,3306 from subnet', cls:'pulumi' },
+  { num:'11', actor:'pulumi', col:1, msg:"aws.ec2.Instance('db-server')", code:'private subnet, no public IP, db-cluster key', cls:'pulumi' },
+  { num:'12', actor:'db',     col:4, msg:'db-server boots in private subnet', code:'private_ip=10.0.2.x  — Pulumi captures this IP', cls:'db' },
+  { num:'13', actor:'pulumi', col:1, msg:'Output.all(db.private_ip).apply(…)', code:'generates user_data with DB_PRIVATE_IP=10.0.2.x baked in', cls:'pulumi' },
+  { num:'14', actor:'pulumi', col:1, msg:"aws.ec2.Instance('nodejs-server')", code:'public subnet, user_data=script, associate_public_ip=True', cls:'pulumi' },
+  { num:'15', actor:'nodejs', col:3, msg:'cloud-init runs user_data at boot', code:'apt install nodejs + netcat  →  writes check-mysql.sh  →  sets DB_PRIVATE_IP env', cls:'nodejs' },
+  { num:'16', actor:'pulumi', col:1, msg:'Output.all(nodejs.public_ip, db.private_ip).apply()', code:'writes ~/.ssh/config with real IPs + ProxyJump', cls:'pulumi' },
+  { num:'17', actor:'you',    col:5, msg:'ssh nodejs-server  (direct, port 22)', code:'SSH reads config → connects to 54.x.x.x → authenticated with db-cluster key', cls:'ssh' },
+  { num:'18', actor:'you',    col:5, msg:'ssh db-server  (ProxyJump)', code:'SSH → nodejs-server → forwards tunnel → 10.0.2.x:22 → db shell', cls:'ssh' },
+];
+
+let current = -1;
+let timer = null;
+let playing = false;
+
+function buildRows() {
+  const container = document.getElementById('seqRows');
+  container.innerHTML = '';
+  STEPS.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'seq-step-row';
+    row.id = 'srow-' + i;
+    const cells = ['','','','',''];
+    cells[s.col - 1] = `<div class="seq-msg-box ${s.cls}">${s.msg}<div class="seq-code-inline">${s.code}</div></div>`;
+    row.innerHTML = `<div class="seq-step-num">${s.num}</div>` + cells.map(c => `<div class="seq-cell">${c}</div>`).join('');
+    container.appendChild(row);
+  });
+}
+
+function updateDisplay() {
+  STEPS.forEach((_, i) => {
+    const row = document.getElementById('srow-' + i);
+    row.classList.remove('lit','done','current');
+    if (i < current) { row.classList.add('lit','done'); }
+    else if (i === current) { row.classList.add('lit','current'); }
+  });
+  document.getElementById('seqFill').style.width = ((current + 1) / STEPS.length * 100) + '%';
+  document.getElementById('seqCounter').textContent = (current + 1) + ' / ' + STEPS.length;
+
+  const row = document.getElementById('srow-' + current);
+  if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function seqPlay() {
+  if (playing) {
+    clearInterval(timer);
+    playing = false;
+    document.getElementById('playBtn').textContent = '▶ Play';
+    return;
+  }
+  playing = true;
+  document.getElementById('playBtn').textContent = '⏸ Pause';
+  if (current >= STEPS.length - 1) { current = -1; }
+  timer = setInterval(() => {
+    current++;
+    updateDisplay();
+    if (current >= STEPS.length - 1) {
+      clearInterval(timer);
+      playing = false;
+      document.getElementById('playBtn').textContent = '▶ Play';
+    }
+  }, 1100);
+}
+
+function seqReset() {
+  clearInterval(timer);
+  playing = false;
+  current = -1;
+  document.getElementById('playBtn').textContent = '▶ Play';
+  document.getElementById('seqFill').style.width = '0%';
+  document.getElementById('seqCounter').textContent = '0 / ' + STEPS.length;
+  STEPS.forEach((_, i) => {
+    const row = document.getElementById('srow-' + i);
+    row.classList.remove('lit','done','current');
+  });
+}
+
+buildRows();
+</script>
+
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- SSH PROXYJUMP DEEP DIVE -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="phase" id="ssh-proxyjump" style="margin-top:80px;scroll-margin-top:60px;">
+  <div class="phase-header">
+    <div class="phase-num">SSH DEEP DIVE</div>
+    <div class="phase-title-wrap">
+      <h2><span class="phase-accent" style="background:var(--cyan)"></span>How SSH reaches the DB server — it has no public IP</h2>
+      <p>Your laptop never touches <code>10.0.2.x</code> directly. The Node.js server acts as a TCP tunnel inside the VPC. Here is every hop, every rule check, and exactly which lines of code make it possible.</p>
+    </div>
+  </div>
+
+  <style>
+    .ssh-journey { display:flex; flex-direction:column; gap:0; }
+    .ssh-hop {
+      display:grid;
+      grid-template-columns: 200px 1fr;
+      border:1px solid var(--border);
+      border-radius:8px;
+      overflow:hidden;
+      margin-bottom:12px;
+    }
+    .ssh-hop-left {
+      background:var(--surface2);
+      border-right:1px solid var(--border);
+      padding:20px 16px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:6px;
+    }
+    .ssh-hop-num {
+      font-size:10px;
+      color:var(--text-dimmer);
+      letter-spacing:2px;
+      font-family:var(--mono);
+    }
+    .ssh-hop-actor {
+      font-size:13px;
+      font-weight:600;
+      font-family:var(--mono);
+    }
+    .ssh-hop-role {
+      font-size:10px;
+      color:var(--text-dimmer);
+      font-family:var(--mono);
+      line-height:1.5;
+    }
+    .ssh-hop-right {
+      padding:20px;
+      background:var(--surface);
+    }
+    .ssh-hop-title {
+      font-size:13px;
+      font-weight:600;
+      font-family:var(--mono);
+      margin-bottom:10px;
+    }
+    .ssh-hop-desc {
+      font-size:12px;
+      color:var(--text-dim);
+      font-family:var(--mono);
+      line-height:1.75;
+      margin-bottom:12px;
+    }
+    .ssh-code {
+      background:#080a0d;
+      border:1px solid var(--border);
+      border-radius:5px;
+      padding:14px 16px;
+      font-size:11px;
+      font-family:var(--mono);
+      line-height:1.75;
+      overflow-x:auto;
+    }
+    .ssh-code .cm { color:#454a57; font-style:italic; }
+    .ssh-code .ck { color:#ff5fa0; }
+    .ssh-code .cs { color:#00e896; }
+    .ssh-code .cv { color:#ffb340; }
+    .ssh-code .cn { color:#b06fff; }
+    .ssh-code .cb { color:#378ADD; }
+    .ssh-code .ct { color:#00d4ff; }
+    .ssh-rule {
+      display:flex;
+      align-items:flex-start;
+      gap:10px;
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:5px;
+      font-size:11px;
+      font-family:var(--mono);
+      line-height:1.6;
+    }
+    .ssh-rule.allow { background:#00e89610; border:1px solid #00e89628; color:#00e896; }
+    .ssh-rule.block { background:#E24B4a10; border:1px solid #E24B4a28; color:#F09595; }
+    .ssh-rule.info  { background:#378ADD10; border:1px solid #378ADD28; color:#85B7EB; }
+    .ssh-rule.warn  { background:#ffb34010; border:1px solid #ffb34028; color:#ffb340; }
+    .ssh-rule-icon { font-size:14px; flex-shrink:0; }
+
+    .ssh-visual {
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:8px;
+      padding:28px 24px;
+      margin-bottom:24px;
+      overflow-x:auto;
+    }
+    .ssh-flow-row {
+      display:flex;
+      align-items:center;
+      gap:0;
+      margin:6px 0;
+      flex-wrap:nowrap;
+    }
+    .ssh-node {
+      padding:10px 14px;
+      border-radius:6px;
+      border:1px solid;
+      font-size:11px;
+      font-family:var(--mono);
+      text-align:center;
+      line-height:1.4;
+      white-space:nowrap;
+      flex-shrink:0;
+    }
+    .ssh-arr { color:var(--text-dimmer); padding:0 8px; font-size:16px; flex-shrink:0; }
+    .ssh-arr-label { font-size:10px; color:var(--text-dimmer); font-family:var(--mono); padding:0 6px; }
+    .ssh-divider {
+      border:none;
+      border-top:1px solid var(--border);
+      margin:20px 0;
+    }
+    .why-box {
+      background:var(--surface2);
+      border:1px solid var(--border);
+      border-left:3px solid var(--cyan);
+      border-radius:0 6px 6px 0;
+      padding:16px 20px;
+      margin:12px 0;
+      font-size:12px;
+      font-family:var(--mono);
+      line-height:1.75;
+      color:var(--text-dim);
+    }
+    .why-box strong { color:var(--text); }
+  </style>
+
+  <!-- VISUAL OVERVIEW -->
+  <div class="ssh-visual">
+    <div style="font-size:10px;color:var(--text-dimmer);letter-spacing:2px;font-family:var(--mono);margin-bottom:20px;">TOPOLOGY — YOUR LAPTOP TO DB SERVER</div>
+
+    <div class="ssh-flow-row">
+      <div class="ssh-node" style="background:#ffb34014;border-color:#ffb34040;color:#ffb340;">Your Laptop<br><span style="font-size:10px;color:#BA7517;">203.x.x.x</span></div>
+      <div class="ssh-arr">→</div>
+      <div class="ssh-arr-label">internet<br>port 22</div>
+      <div class="ssh-arr">→</div>
+      <div class="ssh-node" style="background:#b06fff14;border-color:#b06fff40;color:#b06fff;">nodejs-server<br><span style="font-size:10px;color:#7F77DD;">54.x.x.x (public)</span><br><span style="font-size:10px;color:#7F77DD;">10.0.1.x (private)</span></div>
+      <div class="ssh-arr">→</div>
+      <div class="ssh-arr-label">VPC internal<br>port 22</div>
+      <div class="ssh-arr">→</div>
+      <div class="ssh-node" style="background:#D85A3014;border-color:#D85A3040;color:#F0997B;">db-server<br><span style="font-size:10px;color:#D85A30;">10.0.2.x (private only)</span><br><span style="font-size:10px;color:#D85A30;">NO public IP</span></div>
+    </div>
+
+    <hr class="ssh-divider">
+
+    <div style="font-size:10px;color:var(--text-dimmer);letter-spacing:2px;font-family:var(--mono);margin-bottom:12px;">WHAT SSH ACTUALLY DOES UNDER THE HOOD</div>
+
+    <div class="ssh-flow-row" style="margin:4px 0;">
+      <div style="width:20px;height:20px;background:#ffb34020;border:1px solid #ffb34040;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ffb340;font-family:var(--mono);flex-shrink:0;">1</div>
+      <div class="ssh-arr" style="padding:0 6px;">→</div>
+      <div style="font-size:11px;color:var(--text-dim);font-family:var(--mono);">SSH reads <span style="color:#00e896;">~/.ssh/config</span>, sees <span style="color:#00d4ff;">Host db-server</span> has <span style="color:#ffb340;">ProxyJump nodejs-server</span></div>
+    </div>
+    <div class="ssh-flow-row" style="margin:4px 0;">
+      <div style="width:20px;height:20px;background:#b06fff20;border:1px solid #b06fff40;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:#b06fff;font-family:var(--mono);flex-shrink:0;">2</div>
+      <div class="ssh-arr" style="padding:0 6px;">→</div>
+      <div style="font-size:11px;color:var(--text-dim);font-family:var(--mono);">Opens TCP to <span style="color:#b06fff;">54.x.x.x:22</span> (nodejs public IP) — authenticates with <span style="color:#00e896;">db-cluster.id_rsa</span></div>
+    </div>
+    <div class="ssh-flow-row" style="margin:4px 0;">
+      <div style="width:20px;height:20px;background:#378ADD20;border:1px solid #378ADD40;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:#378ADD;font-family:var(--mono);flex-shrink:0;">3</div>
+      <div class="ssh-arr" style="padding:0 6px;">→</div>
+      <div style="font-size:11px;color:var(--text-dim);font-family:var(--mono);">SSH sends <span style="color:#378ADD;">channel open direct-tcpip</span> request — asks nodejs to open TCP to <span style="color:#F0997B;">10.0.2.x:22</span></div>
+    </div>
+    <div class="ssh-flow-row" style="margin:4px 0;">
+      <div style="width:20px;height:20px;background:#D85A3020;border:1px solid #D85A3040;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:#D85A30;font-family:var(--mono);flex-shrink:0;">4</div>
+      <div class="ssh-arr" style="padding:0 6px;">→</div>
+      <div style="font-size:11px;color:var(--text-dim);font-family:var(--mono);">nodejs connects to <span style="color:#F0997B;">10.0.2.x:22</span> via VPC local route — TCP tunnel now open</div>
+    </div>
+    <div class="ssh-flow-row" style="margin:4px 0;">
+      <div style="width:20px;height:20px;background:#00e89620;border:1px solid #00e89640;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:#00e896;font-family:var(--mono);flex-shrink:0;">5</div>
+      <div class="ssh-arr" style="padding:0 6px;">→</div>
+      <div style="font-size:11px;color:var(--text-dim);font-family:var(--mono);">Second SSH session runs <span style="color:#00e896;">through that tunnel</span> — authenticates to DB with same key, you get a shell</div>
+    </div>
+  </div>
+
+  <!-- HOP BY HOP -->
+  <div class="ssh-journey">
+
+    <!-- HOP 1 -->
+    <div class="ssh-hop">
+      <div class="ssh-hop-left">
+        <div class="ssh-hop-num">HOP 01</div>
+        <div class="ssh-hop-actor" style="color:#ffb340;">Your Laptop</div>
+        <div class="ssh-hop-role">runs the ssh command<br>reads ~/.ssh/config</div>
+      </div>
+      <div class="ssh-hop-right">
+        <div class="ssh-hop-title" style="color:#ffb340;">You type: <code>ssh db-server</code></div>
+        <div class="ssh-hop-desc">SSH looks up <code>Host db-server</code> in your config. It finds <code>ProxyJump nodejs-server</code> — so before connecting to the DB it must first establish a connection to <code>nodejs-server</code> and tunnel through it. Your laptop never tries to reach <code>10.0.2.x</code> directly.</div>
+        <div class="ssh-code"><span class="cm"># ~/.ssh/config — auto-written by Pulumi after `pulumi up`</span>
+
+<span class="ck">Host</span> <span class="ct">nodejs-server</span>
+    <span class="ck">HostName</span>     <span class="cv">54.x.x.x</span>          <span class="cm"># nodejs public IP (export from Pulumi)</span>
+    <span class="ck">User</span>         <span class="cs">ubuntu</span>
+    <span class="ck">IdentityFile</span> <span class="cs">~/.ssh/db-cluster.id_rsa</span>
+
+<span class="ck">Host</span> <span class="ct">db-server</span>
+    <span class="ck">ProxyJump</span>    <span class="cn">nodejs-server</span>     <span class="cm"># ← this is the magic line</span>
+    <span class="ck">HostName</span>     <span class="cv">10.0.2.x</span>          <span class="cm"># db private IP (only reachable inside VPC)</span>
+    <span class="ck">User</span>         <span class="cs">ubuntu</span>
+    <span class="ck">IdentityFile</span> <span class="cs">~/.ssh/db-cluster.id_rsa</span></div>
+        <div class="ssh-rule info"><span class="ssh-rule-icon">ℹ</span><div>Pulumi generates this file via <code>pulumi.Output.all(nodejs.public_ip, db.private_ip).apply(create_config_file)</code> — it only runs after both IPs are known, so the file always has real IPs.</div></div>
+      </div>
+    </div>
+
+    <!-- HOP 2 -->
+    <div class="ssh-hop">
+      <div class="ssh-hop-left">
+        <div class="ssh-hop-num">HOP 02</div>
+        <div class="ssh-hop-actor" style="color:#b06fff;">nodejs-server</div>
+        <div class="ssh-hop-role">internet-facing<br>54.x.x.x:22 open<br>jump host</div>
+      </div>
+      <div class="ssh-hop-right">
+        <div class="ssh-hop-title" style="color:#b06fff;">SSH connects to nodejs public IP — first leg</div>
+        <div class="ssh-hop-desc">Your laptop opens a real TCP connection to <code>54.x.x.x:22</code>. This works because the Node.js server has a public IP and its security group allows port 22 from anywhere. SSH authenticates using the private key. Once authenticated, SSH sends an internal protocol message asking the server to open a TCP channel to <code>10.0.2.x:22</code>.</div>
+        <div class="ssh-code"><span class="cm"># What the nodejs security group allows — from __main__.py</span>
+
+<span class="cv">nodejs_security_group</span> = aws.ec2.<span class="cb">SecurityGroup</span>(
+    <span class="cs">'nodejs-security-group'</span>,
+    <span class="ck">ingress</span>=[
+        aws.ec2.<span class="cb">SecurityGroupIngressArgs</span>(
+            <span class="ck">protocol</span>=<span class="cs">'tcp'</span>,
+            <span class="ck">from_port</span>=<span class="cn">22</span>,
+            <span class="ck">to_port</span>=<span class="cn">22</span>,
+            <span class="ck">cidr_blocks</span>=[<span class="cs">'0.0.0.0/0'</span>],  <span class="cm"># port 22 open to internet</span>
+        ),
+        aws.ec2.<span class="cb">SecurityGroupIngressArgs</span>(
+            <span class="ck">protocol</span>=<span class="cs">'tcp'</span>,
+            <span class="ck">from_port</span>=<span class="cn">3000</span>,
+            <span class="ck">to_port</span>=<span class="cn">3000</span>,
+            <span class="ck">cidr_blocks</span>=[<span class="cs">'0.0.0.0/0'</span>],
+        ),
+    ],
+)</div>
+        <div class="ssh-rule allow"><span class="ssh-rule-icon">✓</span><div>Your laptop IP (<code>203.x.x.x</code>) hits port 22 → security group rule <code>tcp:22 from 0.0.0.0/0</code> → <strong>ALLOW</strong>. First SSH session established.</div></div>
+        <div class="why-box"><strong>Why is SSH open to 0.0.0.0/0?</strong> Because you need to reach it from your laptop which has an unpredictable IP. In production you would replace <code>0.0.0.0/0</code> with your own static IP — the Pulumi comment even says <em>"Consider restricting to your IP"</em>. But functionally this is the public door into the entire system.</div>
+      </div>
+    </div>
+
+    <!-- HOP 3 -->
+    <div class="ssh-hop">
+      <div class="ssh-hop-left">
+        <div class="ssh-hop-num">HOP 03</div>
+        <div class="ssh-hop-actor" style="color:#378ADD;">SSH Protocol</div>
+        <div class="ssh-hop-role">channel open<br>direct-tcpip<br>inside the tunnel</div>
+      </div>
+      <div class="ssh-hop-right">
+        <div class="ssh-hop-title" style="color:#378ADD;">SSH asks nodejs to open TCP to 10.0.2.x:22</div>
+        <div class="ssh-hop-desc">After the first SSH session to <code>54.x.x.x</code> is open, your SSH client sends an SSH protocol message called <code>channel open direct-tcpip</code>. This is not a shell command — it is an SSH protocol feature. It tells the nodejs server's SSH daemon: <em>"open a raw TCP socket to <code>10.0.2.x:22</code> and pipe everything through this channel."</em> The nodejs server does this from its own network interface — which is inside the VPC and can reach the private subnet.</div>
+        <div class="ssh-code"><span class="cm"># You can see this happen with verbose SSH:</span>
+ssh -vvv db-server
+
+<span class="cm"># You will see output like:</span>
+<span class="cs">debug1: channel 0: new [direct-tcpip]</span>
+<span class="cs">debug1: Connecting to 10.0.2.x port 22</span>
+<span class="cs">debug1: Connection established</span>
+
+<span class="cm"># SSH then runs a SECOND SSH session through channel 0:</span>
+<span class="cs">debug1: Authentication succeeded (publickey)</span>
+<span class="cs">debug1: channel 1: new [client-session]</span></div>
+        <div class="ssh-rule info"><span class="ssh-rule-icon">ℹ</span><div>The key never leaves your laptop. The second SSH authentication (to the DB) also uses <code>db-cluster.id_rsa</code> from your laptop — SSH agent forwarding sends the crypto challenge back to your machine to sign.</div></div>
+      </div>
+    </div>
+
+    <!-- HOP 4 -->
+    <div class="ssh-hop">
+      <div class="ssh-hop-left">
+        <div class="ssh-hop-num">HOP 04</div>
+        <div class="ssh-hop-actor" style="color:#D85A30;">DB security group</div>
+        <div class="ssh-hop-role">last firewall check<br>before the shell</div>
+      </div>
+      <div class="ssh-hop-right">
+        <div class="ssh-hop-title" style="color:#D85A30;">DB security group checks the incoming connection</div>
+        <div class="ssh-hop-desc">The TCP connection arriving at <code>10.0.2.x:22</code> comes from <code>10.0.1.x</code> — the nodejs server's private IP inside the public subnet. The DB security group only allows port 22 from <code>10.0.1.0/24</code>. Since <code>10.0.1.x</code> is in that range, it passes. Notice that your laptop's IP <code>203.x.x.x</code> never appears here — the DB sees the connection as coming from <em>nodejs</em>, not from you.</div>
+        <div class="ssh-code"><span class="cm"># DB security group — from __main__.py</span>
+
+<span class="cv">db_security_group</span> = aws.ec2.<span class="cb">SecurityGroup</span>(
+    <span class="cs">'db-security-group'</span>,
+    <span class="ck">ingress</span>=[
+        aws.ec2.<span class="cb">SecurityGroupIngressArgs</span>(
+            <span class="ck">protocol</span>=<span class="cs">'tcp'</span>,
+            <span class="ck">from_port</span>=<span class="cn">22</span>,
+            <span class="ck">to_port</span>=<span class="cn">22</span>,
+            <span class="cm"># ONLY from the public subnet — 10.0.1.0/24</span>
+            <span class="ck">cidr_blocks</span>=[public_subnet.cidr_block],
+        ),
+        aws.ec2.<span class="cb">SecurityGroupIngressArgs</span>(
+            <span class="ck">protocol</span>=<span class="cs">'tcp'</span>,
+            <span class="ck">from_port</span>=<span class="cn">3306</span>,
+            <span class="ck">to_port</span>=<span class="cn">3306</span>,
+            <span class="cm"># MySQL also only from public subnet</span>
+            <span class="ck">cidr_blocks</span>=[public_subnet.cidr_block],
+        ),
+    ],
+)</div>
+        <div class="ssh-rule allow"><span class="ssh-rule-icon">✓</span><div>Connection source = <code>10.0.1.x</code> (nodejs private IP) → matches <code>10.0.1.0/24</code> → <strong>ALLOW port 22</strong>. DB accepts the tunnel.</div></div>
+        <div class="ssh-rule block"><span class="ssh-rule-icon">✗</span><div>If someone tried <code>ssh ubuntu@10.0.2.x</code> directly from the internet — impossible. <code>10.0.2.x</code> has no public IP and is not internet-routable. Even if they somehow got to the security group, <code>203.x.x.x</code> does not match <code>10.0.1.0/24</code> → <strong>DENY</strong>.</div></div>
+      </div>
+    </div>
+
+    <!-- HOP 5 -->
+    <div class="ssh-hop">
+      <div class="ssh-hop-left">
+        <div class="ssh-hop-num">HOP 05</div>
+        <div class="ssh-hop-actor" style="color:#00e896;">Shell on DB</div>
+        <div class="ssh-hop-role">you are in<br>ubuntu@db-server</div>
+      </div>
+      <div class="ssh-hop-right">
+        <div class="ssh-hop-title" style="color:#00e896;">You land in a shell on the DB server</div>
+        <div class="ssh-hop-desc">The second SSH session authenticates (same key, same user) and opens a shell. From your perspective you just typed one command. Under the hood two TCP connections were made and one was tunnelled inside the other. The DB server never needed a public IP — it only ever talked to the nodejs server on its private IP.</div>
+        <div class="ssh-code"><span class="cm"># Everything that happens from ONE command on your laptop:</span>
+
+$ ssh db-server
+
+<span class="cm"># SSH internally:</span>
+<span class="cm"># 1. open TCP → 54.x.x.x:22        (nodejs public IP)</span>
+<span class="cm"># 2. authenticate with db-cluster.id_rsa</span>
+<span class="cm"># 3. channel open direct-tcpip → 10.0.2.x:22</span>
+<span class="cm"># 4. run second SSH session through channel</span>
+<span class="cm"># 5. authenticate again with same key</span>
+
+<span class="cs">Welcome to Ubuntu 22.04 LTS</span>
+<span class="cs">ubuntu@db-server:~$</span>        <span class="cm"># ← you are here</span>
+
+<span class="cm"># Verify you are on the private server:</span>
+<span class="cn">ip addr</span>                    <span class="cm"># shows 10.0.2.x — no public IP</span>
+<span class="cn">curl ifconfig.me</span>           <span class="cm"># shows NAT Elastic IP (outbound only)</span>
+<span class="cn">hostname</span>                   <span class="cm"># db-server</span></div>
+        <div class="ssh-rule warn"><span class="ssh-rule-icon">★</span><div>Run <code>sudo hostnamectl set-hostname db-server</code> once inside to make the prompt show <code>ubuntu@db-server</code> instead of the AWS internal hostname. The Pulumi docs mention this step after first login.</div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- WHY THIS IS SECURE -->
+  <div style="margin-top:28px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;">
+    <div style="font-size:10px;color:var(--text-dimmer);letter-spacing:2px;font-family:var(--mono);margin-bottom:16px;">WHY THIS DESIGN IS SECURE</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="ssh-rule allow"><span class="ssh-rule-icon">✓</span><div><strong>DB has no public IP</strong> — you cannot even attempt to connect to <code>10.0.2.x</code> from the internet. It is not routable.</div></div>
+      <div class="ssh-rule allow"><span class="ssh-rule-icon">✓</span><div><strong>DB SG allows port 22 only from 10.0.1.0/24</strong> — even if someone got inside the VPC, they need to come from the public subnet.</div></div>
+      <div class="ssh-rule allow"><span class="ssh-rule-icon">✓</span><div><strong>Key never leaves your laptop</strong> — ProxyJump does not copy your private key to the nodejs server. The crypto handshake comes back to you.</div></div>
+      <div class="ssh-rule allow"><span class="ssh-rule-icon">✓</span><div><strong>Single key pair for both</strong> — <code>db-cluster.id_rsa</code> authenticates to both servers. Rotate one key and both are secured.</div></div>
+      <div class="ssh-rule block"><span class="ssh-rule-icon">✗</span><div><strong>Attacker can't bypass the jump</strong> — to reach <code>10.0.2.x:22</code> they must first compromise <code>nodejs-server</code>. There is no other path.</div></div>
+      <div class="ssh-rule block"><span class="ssh-rule-icon">✗</span><div><strong>DB has no way to be targeted directly</strong> — port scans from internet hit nothing. No open ports, no public IP, no route.</div></div>
+    </div>
+  </div>
+
+</section>
+
+
+<section class="phase" id="packet-flow" style="margin-top:80px;scroll-margin-top:60px;">
+  <div class="phase-header">
+    <div class="phase-num">PACKET FLOW</div>
+    <div class="phase-title-wrap">
+      <h2><span class="phase-accent" style="background:var(--amber)"></span>How packets travel — private EC2, public EC2, and return paths</h2>
+      <p>Select a flow below. Each step lights up in sequence showing exactly which AWS component handles the packet, what it does to it (rewrite, route, allow/deny), and the IP address at each hop.</p>
+    </div>
+  </div>
+
+  <style>
+    .pf-tabs { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
+    .pf-tab { padding:8px 18px; border-radius:4px; border:1px solid var(--border2); font-size:11px; font-family:var(--mono); color:var(--text-dim); cursor:pointer; transition:all .15s; background:none; }
+    .pf-tab:hover { border-color:var(--amber); color:var(--amber); }
+    .pf-tab.active { background:var(--amber-dim); border-color:var(--amber); color:var(--amber); }
+    .pf-tab.active.blue { background:var(--blue-dim); border-color:var(--blue); color:var(--blue); }
+    .pf-tab.active.pink { background:var(--pink-dim); border-color:var(--pink); color:var(--pink); }
+    .pf-tab.active.green { background:var(--green-dim); border-color:var(--green); color:var(--green); }
+
+    .pf-wrap { background:var(--surface); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    .pf-ctrl { display:flex; align-items:center; gap:12px; padding:14px 20px; border-bottom:1px solid var(--border); }
+    .pf-title-label { font-size:12px; color:var(--text-dim); font-family:var(--mono); flex:1; }
+    .pf-btn { background:none; border:1px solid var(--border2); color:var(--text-dim); font-family:var(--mono); font-size:11px; padding:5px 14px; border-radius:4px; cursor:pointer; transition:all .15s; }
+    .pf-btn:hover { border-color:var(--amber); color:var(--amber); }
+    .pf-progress { width:160px; height:2px; background:var(--border); border-radius:2px; overflow:hidden; }
+    .pf-fill { height:100%; transition:width .4s ease; width:0%; }
+    .pf-ctr { font-size:11px; color:var(--text-dimmer); min-width:48px; text-align:right; font-family:var(--mono); }
+
+    .pf-actors { display:flex; border-bottom:1px solid var(--border); }
+    .pf-actor { flex:1; padding:10px 8px; text-align:center; font-size:10px; font-family:var(--mono); letter-spacing:0.5px; border-right:1px solid var(--border); }
+    .pf-actor:last-child { border-right:none; }
+    .pf-actor.ec2-priv { color:#D85A30; border-bottom:2px solid #D85A30; }
+    .pf-actor.rt-priv  { color:#D4537E; border-bottom:2px solid #D4537E; }
+    .pf-actor.nat      { color:#ffb340; border-bottom:2px solid #ffb340; }
+    .pf-actor.igw      { color:#378ADD; border-bottom:2px solid #378ADD; }
+    .pf-actor.internet { color:#85B7EB; border-bottom:2px solid #85B7EB; }
+    .pf-actor.ec2-pub  { color:#b06fff; border-bottom:2px solid #b06fff; }
+    .pf-actor.sg       { color:#00e896; border-bottom:2px solid #00e896; }
+    .pf-actor.rt-pub   { color:#5DCAA5; border-bottom:2px solid #5DCAA5; }
+
+    .pf-step-row { display:flex; border-top:1px solid var(--border); opacity:.15; transition:opacity .35s, background .3s; min-height:64px; }
+    .pf-step-row.lit  { opacity:1; }
+    .pf-step-row.done { opacity:.35; }
+    .pf-step-row.curr { background:#ffffff06; }
+    .pf-step-cell { flex:1; padding:8px 6px; border-right:1px solid var(--border); display:flex; align-items:center; justify-content:center; }
+    .pf-step-cell:last-child { border-right:none; }
+    .pf-bubble { padding:6px 10px; border-radius:5px; font-size:11px; font-family:var(--mono); line-height:1.5; border:1px solid; text-align:center; width:100%; }
+    .pf-bubble .ip { font-size:10px; margin-top:3px; opacity:.75; }
+    .pf-bubble .action { font-size:10px; margin-top:2px; font-style:italic; opacity:.6; }
+    .pf-bubble.ec2-priv { background:#D85A3012; border-color:#D85A3030; color:#F0997B; }
+    .pf-bubble.rt-priv  { background:#D4537E12; border-color:#D4537E30; color:#ED93B1; }
+    .pf-bubble.nat      { background:#ffb34012; border-color:#ffb34030; color:#ffb340; }
+    .pf-bubble.igw      { background:#378ADD12; border-color:#378ADD30; color:#85B7EB; }
+    .pf-bubble.internet { background:#378ADD0a; border-color:#378ADD20; color:#B5D4F4; }
+    .pf-bubble.ec2-pub  { background:#b06fff12; border-color:#b06fff30; color:#CECBF6; }
+    .pf-bubble.sg       { background:#00e89612; border-color:#00e89630; color:#00e896; }
+    .pf-bubble.rt-pub   { background:#1D9E7512; border-color:#1D9E7530; color:#5DCAA5; }
+    .pf-bubble.ret      { background:#00d4ff0a; border-color:#00d4ff20; color:#00d4ff; }
+    .pf-dir { padding:4px 2px; display:flex; align-items:center; justify-content:center; font-size:14px; color:var(--text-dimmer); flex:0 0 18px; border-right:1px solid var(--border); }
+
+    .pf-legend { display:flex; gap:16px; flex-wrap:wrap; padding:14px 20px; border-top:1px solid var(--border); font-size:10px; font-family:var(--mono); color:var(--text-dimmer); }
+    .pf-leg { display:flex; align-items:center; gap:6px; }
+    .pf-leg-dot { width:8px; height:8px; border-radius:50%; }
+  </style>
+
+  <div class="pf-tabs">
+    <button class="pf-tab active" onclick="loadFlow('priv-out')">Private EC2 → Internet</button>
+    <button class="pf-tab" onclick="loadFlow('internet-priv')">Internet → Private EC2 (blocked)</button>
+    <button class="pf-tab" onclick="loadFlow('pub-out')">Public EC2 → Internet</button>
+    <button class="pf-tab" onclick="loadFlow('internet-pub')">Internet → Public EC2</button>
+    <button class="pf-tab" onclick="loadFlow('ec2-ec2')">Private → Public EC2 (internal)</button>
+    <button class="pf-tab" onclick="loadFlow('pub-to-priv')">Public EC2 → Private EC2</button>
+    <button class="pf-tab" onclick="loadFlow('priv-to-pub-mysql')">Private EC2 → Public EC2 (MySQL)</button>
+  </div>
+
+  <div class="pf-wrap">
+    <div class="pf-ctrl">
+      <button class="pf-btn" id="pfPlay" onclick="pfPlay()">&#9654; Play</button>
+      <button class="pf-btn" onclick="pfReset()">&#8635; Reset</button>
+      <div class="pf-title-label" id="pfLabel">Select a flow above then press Play</div>
+      <div class="pf-progress"><div class="pf-fill" id="pfFill"></div></div>
+      <div class="pf-ctr" id="pfCtr">-</div>
+    </div>
+    <div id="pfActors"></div>
+    <div id="pfSteps"></div>
+    <div class="pf-legend">
+      <div class="pf-leg"><div class="pf-leg-dot" style="background:#D85A30"></div>DB / private EC2</div>
+      <div class="pf-leg"><div class="pf-leg-dot" style="background:#D4537E"></div>Private route table</div>
+      <div class="pf-leg"><div class="pf-leg-dot" style="background:#ffb340"></div>NAT Gateway</div>
+      <div class="pf-leg"><div class="pf-leg-dot" style="background:#378ADD"></div>Internet Gateway</div>
+      <div class="pf-leg"><div class="pf-leg-dot" style="background:#85B7EB"></div>Internet</div>
+      <div class="pf-leg"><div class="pf-leg-dot" style="background:#b06fff"></div>Node.js / public EC2</div>
+      <div class="pf-leg"><div class="pf-leg-dot" style="background:#00e896"></div>Security Group</div>
+      <div class="pf-leg"><div class="pf-leg-dot" style="background:#5DCAA5"></div>Public route table</div>
+    </div>
+  </div>
+</section>
+
+<script>
+const FLOWS = {
+  'priv-out': {
+    label: 'Private EC2 (DB) → Internet — outbound packet journey',
+    color: '#ffb340',
+    actors: [
+      { key:'ec2-priv', label:'DB Server\n10.0.2.x', cls:'ec2-priv' },
+      { key:'rt-priv',  label:'Private\nRoute Table', cls:'rt-priv' },
+      { key:'nat',      label:'NAT Gateway\n(public subnet)', cls:'nat' },
+      { key:'igw',      label:'Internet\nGateway', cls:'igw' },
+      { key:'internet', label:'Internet\n(Ubuntu servers)', cls:'internet' },
+    ],
+    steps: [
+      { cells:[
+        { cls:'ec2-priv', msg:'Sends packet', ip:'src: 10.0.2.x\ndst: 91.189.x.x (apt)', action:'apt-get update' },
+        null, null, null, null
+      ]},
+      { cells:[
+        null,
+        { cls:'rt-priv', msg:'Checks routing table', ip:'dst 91.189.x.x → matches 0.0.0.0/0', action:'→ forward to NAT GW' },
+        null, null, null
+      ]},
+      { cells:[
+        null, null,
+        { cls:'nat', msg:'Receives packet', ip:'src: 10.0.2.x  →  rewrites to\nsrc: 54.x.x.x (Elastic IP)', action:'records translation in NAT table' },
+        null, null
+      ]},
+      { cells:[
+        null, null, null,
+        { cls:'igw', msg:'Routes to internet', ip:'src: 54.x.x.x\ndst: 91.189.x.x', action:'packet exits VPC' },
+        null
+      ]},
+      { cells:[
+        null, null, null, null,
+        { cls:'internet', msg:'Ubuntu server responds', ip:'src: 91.189.x.x\ndst: 54.x.x.x (Elastic IP)', action:'response packet sent back' },
+      ]},
+      { cells:[
+        null, null, null,
+        { cls:'igw', msg:'Return packet arrives', ip:'dst: 54.x.x.x → inside VPC', action:'forwards to NAT GW' },
+        null
+      ]},
+      { cells:[
+        null, null,
+        { cls:'nat', msg:'Translates back', ip:'dst: 54.x.x.x  →  rewrites to\ndst: 10.0.2.x (DB server)', action:'looks up NAT table entry' },
+        null, null
+      ]},
+      { cells:[
+        { cls:'ec2-priv', msg:'Receives response', ip:'src: 91.189.x.x\ndst: 10.0.2.x', action:'apt-get data received' },
+        null, null, null, null
+      ]},
+    ]
+  },
+
+  'internet-priv': {
+    label: 'Internet → Private EC2 — why it is BLOCKED',
+    color: '#E24B4A',
+    actors: [
+      { key:'internet', label:'Internet\n(attacker/client)', cls:'internet' },
+      { key:'igw',      label:'Internet\nGateway', cls:'igw' },
+      { key:'nat',      label:'NAT Gateway', cls:'nat' },
+      { key:'rt-priv',  label:'Private\nRoute Table', cls:'rt-priv' },
+      { key:'ec2-priv', label:'DB Server\n10.0.2.x', cls:'ec2-priv' },
+    ],
+    steps: [
+      { cells:[
+        { cls:'internet', msg:'Initiates connection', ip:'src: 1.2.3.4\ndst: 10.0.2.x (private IP)', action:'tries to reach DB directly' },
+        null, null, null, null
+      ]},
+      { cells:[
+        null,
+        { cls:'igw', msg:'BLOCKED — no route', ip:'10.0.2.x is a private address', action:'IGW only routes public IPs\nPrivate IPs are not internet-routable' },
+        null, null, null
+      ]},
+      { cells:[
+        null,
+        { cls:'ret', msg:'Packet dropped silently', ip:'Internet cannot address 10.0.2.x', action:'RFC 1918 private range — not routable' },
+        null, null, null
+      ]},
+      { cells:[
+        null, null,
+        { cls:'nat', msg:'NAT is one-way only', ip:'Outbound: private→public  ✓\nInbound: public→private  ✗', action:'NAT does not accept\nunsolicited inbound connections' },
+        null, null
+      ]},
+      { cells:[
+        null, null, null, null,
+        { cls:'ec2-priv', msg:'Never reached', ip:'DB server completely\nisolated from internet', action:'No public IP, no IGW route,\nNAT blocks unsolicited inbound' },
+      ]},
+    ]
+  },
+
+  'pub-out': {
+    label: 'Public EC2 (Node.js) → Internet — outbound via IGW directly',
+    color: '#b06fff',
+    actors: [
+      { key:'ec2-pub', label:'Node.js Server\n10.0.1.x', cls:'ec2-pub' },
+      { key:'sg',      label:'Security Group\n(egress rules)', cls:'sg' },
+      { key:'rt-pub',  label:'Public\nRoute Table', cls:'rt-pub' },
+      { key:'igw',     label:'Internet\nGateway', cls:'igw' },
+      { key:'internet',label:'Internet\n(npm, apt etc)', cls:'internet' },
+    ],
+    steps: [
+      { cells:[
+        { cls:'ec2-pub', msg:'Sends packet', ip:'src: 10.0.1.x\ndst: 104.16.x.x (npm)', action:'npm install express' },
+        null, null, null, null
+      ]},
+      { cells:[
+        null,
+        { cls:'sg', msg:'Checks egress rules', ip:'protocol: tcp  port: 443\negress: 0.0.0.0/0 all allowed', action:'ALLOW — passes through' },
+        null, null, null
+      ]},
+      { cells:[
+        null, null,
+        { cls:'rt-pub', msg:'Checks routing table', ip:'dst 104.16.x.x → matches 0.0.0.0/0', action:'→ forward to Internet Gateway\n(not NAT — this is public subnet)' },
+        null, null
+      ]},
+      { cells:[
+        null, null, null,
+        { cls:'igw', msg:'Performs NAT for public IP', ip:'src: 10.0.1.x  →  rewrites to\nsrc: 54.y.y.y (public EC2 IP)', action:'IGW maps instance public IP\n(not Elastic IP — it auto-assigns)' },
+        null
+      ]},
+      { cells:[
+        null, null, null, null,
+        { cls:'internet', msg:'npm server responds', ip:'src: 104.16.x.x\ndst: 54.y.y.y (Node.js public IP)', action:'package data sent back' }
+      ]},
+      { cells:[
+        null, null, null,
+        { cls:'igw', msg:'Return packet', ip:'dst: 54.y.y.y  →  rewrites to\ndst: 10.0.1.x (private IP)', action:'IGW reverses the mapping' },
+        null
+      ]},
+      { cells:[
+        null,
+        { cls:'sg', msg:'Checks ingress for return', ip:'stateful SG: return traffic\nautomatically allowed', action:'connection was established outbound\nso return is implicitly permitted' },
+        null, null, null
+      ]},
+      { cells:[
+        { cls:'ec2-pub', msg:'Receives response', ip:'src: 104.16.x.x\ndst: 10.0.1.x', action:'npm package downloaded' },
+        null, null, null, null
+      ]},
+    ]
+  },
+
+  'internet-pub': {
+    label: 'Internet → Public EC2 (Node.js) — inbound connection on port 3000',
+    color: '#00e896',
+    actors: [
+      { key:'internet', label:'Internet\n(browser client)', cls:'internet' },
+      { key:'igw',      label:'Internet\nGateway', cls:'igw' },
+      { key:'rt-pub',   label:'Public\nRoute Table', cls:'rt-pub' },
+      { key:'sg',       label:'Security Group\n(nodejs-sg)', cls:'sg' },
+      { key:'ec2-pub',  label:'Node.js Server\n10.0.1.x', cls:'ec2-pub' },
+    ],
+    steps: [
+      { cells:[
+        { cls:'internet', msg:'Client sends request', ip:'src: 203.0.113.x\ndst: 54.y.y.y:3000 (public IP)', action:'HTTP GET /api/users' },
+        null, null, null, null
+      ]},
+      { cells:[
+        null,
+        { cls:'igw', msg:'Accepts + routes inbound', ip:'dst: 54.y.y.y  →  translates to\ndst: 10.0.1.x (Node.js private IP)', action:'IGW knows the mapping\nassociate_public_ip_address=True' },
+        null, null, null
+      ]},
+      { cells:[
+        null, null,
+        { cls:'rt-pub', msg:'Local route matches', ip:'dst: 10.0.1.x → matches 10.0.0.0/16', action:'→ deliver locally within VPC\n(no gateway needed, same VPC)' },
+        null, null
+      ]},
+      { cells:[
+        null, null, null,
+        { cls:'sg', msg:'Checks ingress rules', ip:'port 3000 tcp from 0.0.0.0/0\n→ ALLOW (nodejs-security-group)', action:'rule: from_port=3000 cidr=0.0.0.0/0' },
+        null
+      ]},
+      { cells:[
+        null, null, null, null,
+        { cls:'ec2-pub', msg:'Receives request', ip:'src: 203.0.113.x\ndst: 10.0.1.x:3000', action:'Node.js app handles request\nresponds back through same path' }
+      ]},
+      { cells:[
+        null, null, null,
+        { cls:'sg', msg:'Egress for response', ip:'stateful: return traffic\nautomatically allowed', action:'no explicit egress rule needed' },
+        null
+      ]},
+      { cells:[
+        null,
+        { cls:'igw', msg:'Routes response out', ip:'src: 10.0.1.x  →  rewrites to\nsrc: 54.y.y.y (public IP)', action:'client sees response from public IP' },
+        null, null, null
+      ]},
+      { cells:[
+        { cls:'internet', msg:'Client receives response', ip:'src: 54.y.y.y:3000\ndst: 203.0.113.x', action:'HTTP 200 OK — request complete' },
+        null, null, null, null
+      ]},
+    ]
+  },
+
+  'ec2-ec2': {
+    label: 'DB Server → Node.js Server — pure VPC-internal, never leaves AWS',
+    color: '#5DCAA5',
+    actors: [
+      { key:'ec2-priv', label:'DB Server\n10.0.2.x', cls:'ec2-priv' },
+      { key:'rt-priv',  label:'Private\nRoute Table', cls:'rt-priv' },
+      { key:'sg',       label:'DB Security\nGroup', cls:'sg' },
+      { key:'rt-pub',   label:'Public\nRoute Table', cls:'rt-pub' },
+      { key:'ec2-pub',  label:'Node.js Server\n10.0.1.x', cls:'ec2-pub' },
+    ],
+    steps: [
+      { cells:[
+        { cls:'ec2-priv', msg:'Sends packet', ip:'src: 10.0.2.x\ndst: 10.0.1.x:3000', action:'DB responds to Node.js query' },
+        null, null, null, null
+      ]},
+      { cells:[
+        null,
+        { cls:'rt-priv', msg:'Checks routing table', ip:'dst: 10.0.1.x → matches 10.0.0.0/16', action:'→ local route — stays inside VPC\nNAT and IGW never involved' },
+        null, null, null
+      ]},
+      { cells:[
+        null, null,
+        { cls:'sg', msg:'DB egress check', ip:'egress: 0.0.0.0/0 all allowed\n→ ALLOW', action:'DB SG allows all outbound' },
+        null, null
+      ]},
+      { cells:[
+        null, null, null,
+        { cls:'rt-pub', msg:'Delivery route check', ip:'dst: 10.0.1.x → matches 10.0.0.0/16', action:'→ local — delivered within VPC' },
+        null
+      ]},
+      { cells:[
+        null, null, null, null,
+        { cls:'ec2-pub', msg:'Receives packet', ip:'src: 10.0.2.x\ndst: 10.0.1.x:3000', action:'Node.js gets DB response\npacket never left the VPC' }
+      ]},
+      { cells:[
+        null, null, null, null,
+        { cls:'sg', msg:'Node.js SG ingress', ip:'port 3306 from 10.0.1.x\nwaiting — this is Node→DB direction', action:'Node.js SG: port 3000 open\nDB SG: port 3306 from 10.0.1.0/24' }
+      ]},
+    ]
+  },
+
+  'pub-to-priv': {
+    label: 'Public EC2 (Node.js) → Private EC2 (DB) — Node.js initiates MySQL query',
+    color: '#b06fff',
+    actors: [
+      { key:'ec2-pub',  label:'Node.js Server\n10.0.1.x', cls:'ec2-pub' },
+      { key:'sg',       label:'Node.js\nSecurity Group', cls:'sg' },
+      { key:'rt-pub',   label:'Public\nRoute Table', cls:'rt-pub' },
+      { key:'rt-priv',  label:'Private\nRoute Table', cls:'rt-priv' },
+      { key:'ec2-priv', label:'DB Server\n10.0.2.x', cls:'ec2-priv' },
+    ],
+    steps: [
+      { cells:[
+        { cls:'ec2-pub', msg:'App opens DB connection', ip:'src: 10.0.1.x\ndst: 10.0.2.x:3306', action:'mysql.createConnection({ host: process.env.DB_PRIVATE_IP })' },
+        null, null, null, null
+      ]},
+      { cells:[
+        null,
+        { cls:'sg', msg:'Node.js SG egress check', ip:'egress: protocol -1, 0.0.0.0/0\n→ ALLOW all outbound', action:'port 3306 to 10.0.2.x passes freely' },
+        null, null, null
+      ]},
+      { cells:[
+        null, null,
+        { cls:'rt-pub', msg:'Route table lookup', ip:'dst: 10.0.2.x → matches 10.0.0.0/16', action:'→ local VPC route\nNAT + IGW not involved at all' },
+        null, null
+      ]},
+      { cells:[
+        null, null, null,
+        { cls:'rt-priv', msg:'Delivery into private subnet', ip:'dst: 10.0.2.x → matches 10.0.0.0/16', action:'→ local, packet delivered\ndirectly inside VPC fabric' },
+        null
+      ]},
+      { cells:[
+        null, null, null, null,
+        { cls:'ec2-priv', msg:'DB SG ingress check', ip:'port 3306 from 10.0.1.x\nsource is in 10.0.1.0/24', action:'Rule: from_port=3306 cidr=public_subnet.cidr_block\n→ ALLOW' }
+      ]},
+      { cells:[
+        null, null, null, null,
+        { cls:'ec2-priv', msg:'MySQL accepts connection', ip:'src: 10.0.1.x:ephemeral\ndst: 10.0.2.x:3306', action:'DB_PRIVATE_IP env var set by user_data\nNode.js knew this IP from boot' }
+      ]},
+      { cells:[
+        null, null, null,
+        { cls:'rt-priv', msg:'Response packet routes back', ip:'src: 10.0.2.x\ndst: 10.0.1.x → 10.0.0.0/16 local', action:'return path is symmetric, same local route' },
+        null
+      ]},
+      { cells:[
+        null,
+        { cls:'sg', msg:'Node.js SG — stateful return', ip:'established connection\n→ return traffic auto-allowed', action:'SG is stateful: no explicit inbound\nrule needed for established flows' },
+        null, null, null
+      ]},
+      { cells:[
+        { cls:'ec2-pub', msg:'MySQL query result received', ip:'src: 10.0.2.x\ndst: 10.0.1.x', action:'SELECT rows returned — full roundtrip\nentirely inside VPC, zero internet hops' },
+        null, null, null, null
+      ]},
+    ]
+  },
+
+  'priv-to-pub-mysql': {
+    label: 'Private EC2 (DB) → Public EC2 (Node.js) — DB pushes notification / response',
+    color: '#D85A30',
+    actors: [
+      { key:'ec2-priv', label:'DB Server\n10.0.2.x', cls:'ec2-priv' },
+      { key:'sg',       label:'DB Security\nGroup', cls:'sg' },
+      { key:'rt-priv',  label:'Private\nRoute Table', cls:'rt-priv' },
+      { key:'rt-pub',   label:'Public\nRoute Table', cls:'rt-pub' },
+      { key:'ec2-pub',  label:'Node.js Server\n10.0.1.x', cls:'ec2-pub' },
+    ],
+    steps: [
+      { cells:[
+        { cls:'ec2-priv', msg:'DB sends response packet', ip:'src: 10.0.2.x:3306\ndst: 10.0.1.x:ephemeral', action:'MySQL query result rows sent back\n(could also be a DB-initiated event)' },
+        null, null, null, null
+      ]},
+      { cells:[
+        null,
+        { cls:'sg', msg:'DB SG egress check', ip:'egress: protocol -1, 0.0.0.0/0\n→ ALLOW all outbound', action:'DB security group allows all outbound\nno port restriction on egress' },
+        null, null, null
+      ]},
+      { cells:[
+        null, null,
+        { cls:'rt-priv', msg:'Route table lookup', ip:'dst: 10.0.1.x → matches 10.0.0.0/16\nnot 0.0.0.0/0 — local wins', action:'→ local VPC route used\n0.0.0.0/0→NAT rule NOT matched\nbecause 10.0.0.0/16 is more specific' },
+        null, null
+      ]},
+      { cells:[
+        null, null, null,
+        { cls:'rt-pub', msg:'Packet arrives in public subnet', ip:'dst: 10.0.1.x → matches 10.0.0.0/16', action:'→ local delivery, no routing needed\npure Layer-3 forwarding inside VPC' },
+        null
+      ]},
+      { cells:[
+        null, null, null, null,
+        { cls:'ec2-pub', msg:'Node.js SG ingress check', ip:'src: 10.0.2.x port: ephemeral\nincoming from private subnet', action:'SG is stateful — if Node.js opened\nthe connection, return is auto-allowed\nNo separate inbound rule needed' }
+      ]},
+      { cells:[
+        null, null, null, null,
+        { cls:'ec2-pub', msg:'Node.js receives data', ip:'src: 10.0.2.x:3306\ndst: 10.0.1.x', action:'Query result consumed by app\nDB_PRIVATE_IP=10.0.2.x was set at\nboot via user_data /etc/environment' }
+      ]},
+    ]
+  }
+};
+
+let pfCurrent = -1;
+let pfTimer = null;
+let pfPlaying = false;
+let pfActiveFlow = 'priv-out';
+
+function loadFlow(key) {
+  pfReset();
+  pfActiveFlow = key;
+  document.querySelectorAll('.pf-tab').forEach((t,i) => {
+    t.classList.remove('active','blue','pink','green','teal','coral');
+  });
+  const tabs = document.querySelectorAll('.pf-tab');
+  const idx = ['priv-out','internet-priv','pub-out','internet-pub','ec2-ec2','pub-to-priv','priv-to-pub-mysql'].indexOf(key);
+  const colorMap = ['','blue','pink','green','','blue',''];
+  if(tabs[idx]) { tabs[idx].classList.add('active'); if(colorMap[idx]) tabs[idx].classList.add(colorMap[idx]); }
+
+  const flow = FLOWS[key];
+  document.getElementById('pfLabel').textContent = flow.label;
+  document.getElementById('pfFill').style.background = flow.color;
+
+  const actorDiv = document.getElementById('pfActors');
+  actorDiv.innerHTML = '<div class="pf-actors">' +
+    flow.actors.map(a => `<div class="pf-actor ${a.cls}">${a.label.replace('\n','<br>')}</div>`).join('') +
+    '</div>';
+
+  const stepsDiv = document.getElementById('pfSteps');
+  stepsDiv.innerHTML = flow.steps.map((s, si) =>
+    `<div class="pf-step-row" id="pfrow-${si}">` +
+    s.cells.map(c => {
+      if (!c) return '<div class="pf-step-cell"></div>';
+      return `<div class="pf-step-cell"><div class="pf-bubble ${c.cls}"><strong>${c.msg}</strong><div class="ip">${c.ip.replace(/\n/g,'<br>')}</div><div class="action">${c.action.replace(/\n/g,'<br>')}</div></div></div>`;
+    }).join('') +
+    '</div>'
+  ).join('');
+
+  document.getElementById('pfCtr').textContent = '0 / ' + flow.steps.length;
+}
+
+function pfUpdateDisplay() {
+  const flow = FLOWS[pfActiveFlow];
+  flow.steps.forEach((_, i) => {
+    const row = document.getElementById('pfrow-' + i);
+    if (!row) return;
+    row.classList.remove('lit','done','curr');
+    if (i < pfCurrent) row.classList.add('lit','done');
+    else if (i === pfCurrent) row.classList.add('lit','curr');
+  });
+  document.getElementById('pfFill').style.width = ((pfCurrent+1)/flow.steps.length*100)+'%';
+  document.getElementById('pfCtr').textContent = (pfCurrent+1) + ' / ' + flow.steps.length;
+  const row = document.getElementById('pfrow-' + pfCurrent);
+  if (row) row.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function pfPlay() {
+  if (pfPlaying) {
+    clearInterval(pfTimer);
+    pfPlaying = false;
+    document.getElementById('pfPlay').textContent = '▶ Play';
+    return;
+  }
+  pfPlaying = true;
+  document.getElementById('pfPlay').textContent = '⏸ Pause';
+  const flow = FLOWS[pfActiveFlow];
+  if (pfCurrent >= flow.steps.length - 1) pfCurrent = -1;
+  pfTimer = setInterval(() => {
+    pfCurrent++;
+    pfUpdateDisplay();
+    if (pfCurrent >= flow.steps.length - 1) {
+      clearInterval(pfTimer);
+      pfPlaying = false;
+      document.getElementById('pfPlay').textContent = '▶ Play';
+    }
+  }, 1200);
+}
+
+function pfReset() {
+  clearInterval(pfTimer);
+  pfPlaying = false;
+  pfCurrent = -1;
+  document.getElementById('pfPlay').textContent = '▶ Play';
+  document.getElementById('pfFill').style.width = '0%';
+  const flow = FLOWS[pfActiveFlow];
+  if (flow) {
+    document.getElementById('pfCtr').textContent = '0 / ' + flow.steps.length;
+    flow.steps.forEach((_,i) => {
+      const row = document.getElementById('pfrow-'+i);
+      if (row) row.classList.remove('lit','done','curr');
+    });
+  }
+}
+
+loadFlow('priv-out');
+</script>
+
+</div><!-- /content -->
+
+<div class="footer">
+  <span>// Pulumi + AWS Infrastructure Deep Dive</span>
+  <span>ap-southeast-1a · VPC 10.0.0.0/16</span>
+</div>
+
+<script>
+function toggle(header) {
+  const step = header.parentElement;
+  step.classList.toggle('open');
+}
+
+function copyCode(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  const text = pre.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'copied!';
+    setTimeout(() => btn.textContent = 'copy', 1800);
+  });
+}
+
+// Nav active state on scroll
+const sections = document.querySelectorAll('.phase');
+const navLinks = document.querySelectorAll('.nav a');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const active = document.querySelector(`.nav a[href="#${entry.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

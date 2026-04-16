@@ -1,0 +1,16 @@
+/node_modules
+node_modules
+
+# local env (never commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Next.js
+.next
+out
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
