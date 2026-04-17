@@ -24,7 +24,7 @@ export default function RootLayout({ children }) {
           borderBottom: '1px solid var(--border)',
           padding: 0,
         }}>
-          <div style={{ width: '88%', maxWidth: 1700, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0 }}>
+          <div style={{ width: '100%', maxWidth: 1700, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0 }}>
             <a
               href="/"
               style={{

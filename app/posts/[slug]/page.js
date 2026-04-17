@@ -118,29 +118,29 @@ export default async function PostPage({ params }) {
   const html = post.format === 'html' ? post.content : parseMarkdown(post.content)
 
   return (
-    <div style={{ width: '88%', maxWidth: 1700, margin: '0 auto', padding: '0 24px 80px' }}>
+    <div style={{ width: '100%', padding: '0 clamp(8px, 1.5vw, 20px) 80px' }}>
+      <div style={{ width: '100%', maxWidth: 1800, margin: '0 auto' }}>
+        {/* Back link */}
+        <div style={{ paddingTop: 48, marginBottom: 48 }}>
+          <a
+            href="/"
+            style={{
+              fontSize: 11,
+              color: 'var(--text-dimmer)',
+              letterSpacing: 1,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              transition: 'color .15s',
+            }}
+            className="back-link"
+          >
+            ← All Posts
+          </a>
+        </div>
 
-      {/* Back link */}
-      <div style={{ paddingTop: 48, marginBottom: 48 }}>
-        <a
-          href="/"
-          style={{
-            fontSize: 11,
-            color: 'var(--text-dimmer)',
-            letterSpacing: 1,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            transition: 'color .15s',
-          }}
-          className="back-link"
-        >
-          ← All Posts
-        </a>
-      </div>
-
-      {/* Article header */}
-      <article style={{ maxWidth: 1200, margin: '0 auto' }}>
+        {/* Article header */}
+        <article style={{ width: '100%' }}>
         <header style={{ marginBottom: 48 }}>
           {/* Tags */}
           {post.tags && post.tags.length > 0 && (
@@ -212,44 +212,52 @@ export default async function PostPage({ params }) {
         <div
           className="prose"
           dangerouslySetInnerHTML={{ __html: html }}
-          style={{ fontSize: 14, maxWidth: 980 }}
+          style={{
+            fontSize: 14,
+            width: '100%',
+            maxWidth: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+          }}
         />
-        <AdminDeletePost slug={post.slug} />
-      </article>
+          <AdminDeletePost slug={post.slug} />
+        </article>
 
-      {/* Footer nav */}
-      <div style={{
-        marginTop: 64,
-        paddingTop: 32,
-        borderTop: '1px solid var(--border)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
-        <a
-          href="/"
-          style={{
-            fontSize: 12,
-            color: 'var(--text-dim)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          ← Back to all posts
-        </a>
-        <a
-          href="/create"
-          style={{
-            fontSize: 12,
-            color: c.accent,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          + Write a new post
-        </a>
+        {/* Footer nav */}
+        <div style={{
+          marginTop: 64,
+          paddingTop: 32,
+          borderTop: '1px solid var(--border)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <a
+            href="/"
+            style={{
+              fontSize: 12,
+              color: 'var(--text-dim)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            ← Back to all posts
+          </a>
+          <a
+            href="/create"
+            style={{
+              fontSize: 12,
+              color: c.accent,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            + Write a new post
+          </a>
+        </div>
       </div>
     </div>
   )
